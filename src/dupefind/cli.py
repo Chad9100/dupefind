@@ -1,0 +1,209 @@
+"""Command-line interface: ``dupefind scan | plan | apply``."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from typing import Sequence
+
+from . import __version__
+from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
+from .plan import STRATEGIES, PlanError, build_plan, load_plan, write_plan
+from .report import format_size, parse_size, render_report, result_to_dict
+from .scanner import find_duplicates
+
+DEFAULT_PLAN = "dupefind-plan.json"
+DEFAULT_QUARANTINE = "dupefind-quarantine"
+
+
+def _size_arg(text: str) -> int:
+    try:
+        return parse_size(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _scan_options() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("paths", nargs="+", metavar="PATH", help="files or folders to scan")
+    p.add_argument(
+        "--min-size",
+        type=_size_arg,
+        default=1,
+        metavar="SIZE",
+        help="ignore files smaller than SIZE, e.g. 100, 4K, 1.5M (default: 1 byte, "
+        "so empty files are skipped; use 0 to include them)",
+    )
+    p.add_argument(
+        "--include",
+        action="append",
+        default=[],
+        metavar="GLOB",
+        help="only consider files whose name or relative path matches GLOB (repeatable)",
+    )
+    p.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="GLOB",
+        help="skip files and folders whose name or relative path matches GLOB (repeatable)",
+    )
+    return p
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="dupefind",
+        description="Find duplicate files, review a plan, then quarantine or delete the extras.",
+    )
+    parser.add_argument("--version", action="version", version=f"dupefind {__version__}")
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+    sub.required = True
+    common = _scan_options()
+
+    scan = sub.add_parser(
+        "scan", parents=[common], help="report duplicate files (read-only)",
+        description="Report groups of identical files. Never modifies anything.",
+    )
+    scan.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    scan.add_argument(
+        "--limit", type=int, default=20, metavar="N",
+        help="show at most N groups in the human report (0 = all; default 20)",
+    )
+
+    plan = sub.add_parser(
+        "plan", parents=[common], help="write a reviewable plan of what to remove",
+        description="Scan, choose one copy to keep per group, and write the plan to a "
+        "JSON file. Nothing is moved or deleted.",
+    )
+    plan.add_argument(
+        "--keep", choices=STRATEGIES, default="oldest",
+        help="which copy to keep: oldest/newest by modification time, shortest-path, "
+        "or first-in (the copy under the earliest PATH argument). Default: oldest",
+    )
+    plan.add_argument(
+        "-o", "--output", default=DEFAULT_PLAN, metavar="FILE",
+        help=f"plan file to write (default: {DEFAULT_PLAN})",
+    )
+    plan.add_argument("--force", action="store_true", help="overwrite an existing plan file")
+
+    apply = sub.add_parser(
+        "apply", help="carry out a plan (quarantine by default)",
+        description="Re-verify every file in PLAN, then move the extra copies to a "
+        "quarantine folder, or delete them with --delete.",
+    )
+    apply.add_argument("plan", metavar="PLAN", help="plan file written by 'dupefind plan'")
+    apply.add_argument(
+        "--quarantine", metavar="DIR",
+        help=f"where to move extra copies (default: {DEFAULT_QUARANTINE}/ next to the plan)",
+    )
+    apply.add_argument("--delete", action="store_true", help="delete extra copies instead of moving")
+    apply.add_argument("--dry-run", action="store_true", help="verify and show what would happen")
+    return parser
+
+
+def _files(n: int) -> str:
+    return f"{n:,} file" if n == 1 else f"{n:,} files"
+
+
+def _warn_errors(result) -> None:
+    for err in result.errors:
+        print(f"dupefind: warning: {err.path}: {err.message}", file=sys.stderr)
+
+
+def _cmd_scan(args) -> int:
+    result = find_duplicates(
+        args.paths, include=args.include, exclude=args.exclude, min_size=args.min_size
+    )
+    if args.json:
+        print(json.dumps(result_to_dict(result), indent=2, ensure_ascii=False))
+    else:
+        limit = None if args.limit <= 0 else args.limit
+        print(render_report(result, limit=limit))
+    return 0
+
+
+def _cmd_plan(args) -> int:
+    result = find_duplicates(
+        args.paths, include=args.include, exclude=args.exclude, min_size=args.min_size
+    )
+    _warn_errors(result)
+    if not result.groups:
+        print(f"Scanned {result.files_scanned:,} files: no duplicates found; no plan written.")
+        return 0
+    plan = build_plan(result, args.keep)
+    try:
+        write_plan(plan, args.output, force=args.force)
+    except FileExistsError as exc:
+        print(f"dupefind: error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"dupefind: error: cannot write {args.output}: {exc.strerror or exc}", file=sys.stderr)
+        return 2
+    s = plan["summary"]
+    print(
+        f"Wrote {os.path.abspath(args.output)}\n"
+        f"  {s['groups']:,} groups, {s['files_to_remove']:,} files to remove "
+        f"(keep: {args.keep}), {format_size(s['reclaimable_bytes'])} reclaimable\n"
+        f"Review it, then run: dupefind apply {args.output} --dry-run"
+    )
+    return 0
+
+
+def _cmd_apply(args) -> int:
+    try:
+        plan = load_plan(args.plan)
+    except PlanError as exc:
+        print(f"dupefind: error: {exc}", file=sys.stderr)
+        return 2
+    qdir = args.quarantine
+    if not args.delete and not qdir:
+        qdir = os.path.join(os.path.dirname(os.path.abspath(args.plan)), DEFAULT_QUARANTINE)
+    report = apply_plan(plan, delete=args.delete, quarantine_dir=qdir, dry_run=args.dry_run)
+
+    width = max((len(a.status) for a in report.actions), default=0)
+    for a in report.actions:
+        line = f"{a.status:<{width}}  {a.path}"
+        if a.status in (MOVED, WOULD_MOVE) and a.dest:
+            line += f" -> {a.dest}"
+        elif a.status == SKIPPED:
+            line += f": {a.detail}"
+        print(line)
+
+    verb = "deleted" if args.delete else "moved"
+    if args.dry_run:
+        summary = (
+            f"Dry run: would have {verb} {_files(len(report.done))} "
+            f"({format_size(report.reclaimed)})"
+        )
+    else:
+        summary = f"{verb.capitalize()} {_files(len(report.done))} ({format_size(report.reclaimed)})"
+    if report.skipped:
+        summary += f", skipped {len(report.skipped):,}"
+    if not args.delete and report.done and not args.dry_run:
+        summary += f"\nQuarantine: {report.quarantine_dir}"
+    if not report.actions:
+        summary = "Plan has nothing to do."
+    print(summary)
+    return 1 if report.skipped else 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):
+            pass
+    args = build_parser().parse_args(argv)
+    handlers = {"scan": _cmd_scan, "plan": _cmd_plan, "apply": _cmd_apply}
+    try:
+        return handlers[args.command](args)
+    except KeyboardInterrupt:
+        print("dupefind: interrupted", file=sys.stderr)
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())
