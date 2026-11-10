@@ -12,7 +12,14 @@ from . import __version__
 from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
 from .cache import HashCache
 from .progress import ProgressLine, stream_is_tty
-from .plan import STRATEGIES, PlanError, build_plan, load_plan, write_plan
+from .plan import STRATEGIES, PlanError, build_plan, keep_spec, load_plan, write_plan
+
+
+def _keep_type(value: str) -> str:
+    try:
+        return keep_spec(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{exc} (choose from {', '.join(STRATEGIES)})") from None
 from .report import format_size, parse_size, render_report, result_to_dict
 from .purge import KEPT, parse_age, purge_quarantine
 from .restore import RestoreError, restore_quarantine
@@ -114,9 +121,11 @@ def build_parser() -> argparse.ArgumentParser:
         "JSON file. Nothing is moved or deleted.",
     )
     plan.add_argument(
-        "--keep", choices=STRATEGIES, default="oldest",
+        "--keep", type=_keep_type, default="oldest", metavar="STRATEGY[,STRATEGY...]",
         help="which copy to keep: oldest/newest by modification time, shortest-path, "
-        "or first-in (the copy under the earliest PATH argument). Default: oldest",
+        "or first-in (the copy under the earliest PATH argument). Comma-separate "
+        "several to use later ones as tie-breakers, e.g. first-in,oldest. "
+        "Default: oldest",
     )
     plan.add_argument(
         "--keep-pattern", action="append", default=[], metavar="GLOB",

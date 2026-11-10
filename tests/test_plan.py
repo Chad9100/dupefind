@@ -9,6 +9,7 @@ from dupefind.plan import (
     build_plan,
     choose_keep,
     load_plan,
+    parse_strategies,
     validate_plan,
     write_plan,
 )
@@ -61,6 +62,22 @@ def test_patterns_that_match_nothing_or_everything_are_ignored():
 def test_unknown_strategy():
     with pytest.raises(ValueError):
         choose_keep(FILES, "random")
+
+
+def test_combined_strategies_break_ties():
+    # r2 files tie on first-in; oldest then picks b.txt over c.txt
+    assert choose_keep(FILES, "first-in,oldest") is FILES[0]
+    assert choose_keep(FILES[1:], "first-in,oldest") is FILES[1]
+    assert choose_keep(FILES[1:], "first-in,newest") is FILES[2]
+    # order matters: oldest first decides alone
+    assert choose_keep(FILES, "oldest,first-in") is FILES[1]
+
+
+def test_combined_strategies_validation():
+    assert parse_strategies("first-in, oldest") == ["first-in", "oldest"]
+    for bad in ("oldest,random", "", "oldest,"):
+        with pytest.raises(ValueError):
+            parse_strategies(bad)
 
 
 def make_plan():

@@ -35,7 +35,7 @@ Estimates are rough working hours for one person.
 
 - [x] `--keep-pattern GLOB` / `--remove-pattern GLOB` to prefer or target
       copies by path (for example "always remove from Downloads")
-- [ ] Keep strategies combinable as tie-breakers (`--keep first-in,oldest`)
+- [x] Keep strategies combinable as tie-breakers (`--keep first-in,oldest`)
 - [ ] `dupefind plan --from-scan scan.json` to plan from saved `--json` output
 
 ## v0.5: link instead of delete (about 3 h)

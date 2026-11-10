@@ -99,6 +99,27 @@ def test_plan_first_in(tmp_path, capsys):
     assert data["groups"][0]["keep"] == str(tmp_path / "master" / "x")
 
 
+def test_plan_combined_keep(tmp_path, capsys):
+    write(tmp_path / "master" / "a" / "x", "content")
+    write(tmp_path / "master" / "b" / "x", "content")
+    write(tmp_path / "backup" / "x", "content")
+    os.utime(tmp_path / "master" / "a" / "x", (2000, 2000))
+    os.utime(tmp_path / "master" / "b" / "x", (1000, 1000))
+    plan = tmp_path / "plan.json"
+    assert main(["plan", str(tmp_path / "master"), str(tmp_path / "backup"),
+                 "--keep", "first-in,oldest", "-o", str(plan)]) == 0
+    data = json.loads(plan.read_text("utf-8"))
+    assert data["keep_strategy"] == "first-in,oldest"
+    assert data["groups"][0]["keep"] == str(tmp_path / "master" / "b" / "x")
+
+
+def test_plan_bad_keep_strategy(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["plan", str(tmp_path), "--keep", "oldest,bogus"])
+    assert exc.value.code == 2
+    assert "bogus" in capsys.readouterr().err
+
+
 def test_plan_remove_and_keep_pattern(tmp_path):
     write(tmp_path / "Downloads" / "x", "content")
     write(tmp_path / "Archive" / "x", "content")

@@ -80,7 +80,7 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
 ### Plan
 
 ```sh
-dupefind plan PATH... [scan options] [--keep oldest|newest|shortest-path|first-in]
+dupefind plan PATH... [scan options] [--keep STRATEGY[,STRATEGY...]]
                       [--keep-pattern GLOB] [--remove-pattern GLOB]
                       [-o dupefind-plan.json] [--force]
 ```
@@ -93,6 +93,10 @@ dupefind plan PATH... [scan options] [--keep oldest|newest|shortest-path|first-i
 | `newest`        | the copy with the newest modification time                   |
 | `shortest-path` | the copy with the shortest full path                         |
 | `first-in`      | the copy under the earliest PATH you listed (`plan master backup` keeps the copy in `master`) |
+
+Strategies can be combined with commas, and later ones only break ties left by
+earlier ones: `--keep first-in,oldest` keeps the copy under the earliest PATH
+and, if several copies sit under that PATH, the oldest of those.
 
 `--keep-pattern GLOB` and `--remove-pattern GLOB` (both repeatable) override the
 strategy by path. Copies matching a `--keep-pattern` are the only candidates to

@@ -20,6 +20,31 @@ from .scanner import DupGroup, FileInfo, ScanResult
 PLAN_FORMAT = 1
 STRATEGIES = ("oldest", "newest", "shortest-path", "first-in")
 
+_STRATEGY_KEYS = {
+    "oldest": lambda f: f.mtime,
+    "newest": lambda f: -f.mtime,
+    "shortest-path": lambda f: len(f.path),
+    "first-in": lambda f: f.root_index,
+}
+
+
+def parse_strategies(spec: str) -> list[str]:
+    """Split a comma-separated ``--keep`` value into validated strategy names.
+
+    Earlier names take priority; later ones only break ties.
+    """
+    names = [n.strip() for n in spec.split(",")]
+    for n in names:
+        if n not in _STRATEGY_KEYS:
+            raise ValueError(f"unknown keep strategy: {n or '(empty)'}")
+    return names
+
+
+def keep_spec(spec: str) -> str:
+    """argparse type for ``--keep``: validate and normalise 'a, b' to 'a,b'."""
+    return ",".join(parse_strategies(spec))
+
+
 _README = (
     "Review before running 'dupefind apply'. In each group the 'keep' file is "
     "left alone and every 'remove' file is moved to quarantine (or deleted with "
@@ -49,7 +74,9 @@ def choose_keep(
     """Pick the copy to keep.
 
     oldest / newest use modification time; shortest-path uses path length;
-    first-in prefers the earliest PATH given on the command line. Ties fall
+    first-in prefers the earliest PATH given on the command line. A
+    comma-separated list such as ``first-in,oldest`` applies each in turn,
+    later ones only breaking ties of earlier ones. Remaining ties fall
     back to PATH order and then alphabetical path order, so the choice is
     deterministic.
 
@@ -61,17 +88,8 @@ def choose_keep(
         files = [f for f in files if path_matches(f.path, keep_patterns)] or list(files)
     if remove_patterns:
         files = [f for f in files if not path_matches(f.path, remove_patterns)] or list(files)
-    if strategy == "oldest":
-        key = lambda f: (f.mtime, f.root_index, f.path)  # noqa: E731
-    elif strategy == "newest":
-        key = lambda f: (-f.mtime, f.root_index, f.path)  # noqa: E731
-    elif strategy == "shortest-path":
-        key = lambda f: (len(f.path), f.root_index, f.path)  # noqa: E731
-    elif strategy == "first-in":
-        key = lambda f: (f.root_index, f.path)  # noqa: E731
-    else:
-        raise ValueError(f"unknown keep strategy: {strategy}")
-    return min(files, key=key)
+    parts = [_STRATEGY_KEYS[n] for n in parse_strategies(strategy)]
+    return min(files, key=lambda f: tuple(p(f) for p in parts) + (f.root_index, f.path))
 
 
 def _group_entry(
