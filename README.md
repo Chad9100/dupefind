@@ -62,10 +62,26 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   changed size or mtime always forces a re-hash; `apply` never uses the cache
   and re-hashes every file itself. `plan` accepts it too.
 
+  Checked on a temp tree of three files (two identical 4.9 KiB files, one
+  unique). Two scans with the same `--cache cache.json` print the same report:
+
+  ```text
+  Scanned 3 files (9.8 KiB) in 1 root
+  Found 1 duplicate group: 2 files, 1 redundant copy
+  Wasted space: 4.9 KiB
+  ```
+
+  The second run read the cache: after setting the cached hash of one file to
+  a wrong value (same size and mtime), the next scan reported
+  `No duplicates found.`, so the stored hash was used instead of reading the
+  file. After `touch` on that file (new mtime) the scan re-hashed it and
+  found the duplicate group again.
+
 ### Plan
 
 ```sh
 dupefind plan PATH... [scan options] [--keep oldest|newest|shortest-path|first-in]
+                      [--keep-pattern GLOB] [--remove-pattern GLOB]
                       [-o dupefind-plan.json] [--force]
 ```
 
@@ -77,6 +93,15 @@ dupefind plan PATH... [scan options] [--keep oldest|newest|shortest-path|first-i
 | `newest`        | the copy with the newest modification time                   |
 | `shortest-path` | the copy with the shortest full path                         |
 | `first-in`      | the copy under the earliest PATH you listed (`plan master backup` keeps the copy in `master`) |
+
+`--keep-pattern GLOB` and `--remove-pattern GLOB` (both repeatable) override the
+strategy by path. Copies matching a `--keep-pattern` are the only candidates to
+keep; then copies matching a `--remove-pattern` are dropped from the
+candidates. Globs match the file name or the full path (written with `/`), so
+`--remove-pattern "*/Downloads/*"` always removes the Downloads copy when
+another copy exists. A pattern that would leave no candidate in a group is
+ignored for that group, so one copy is always kept; the `--keep` strategy then
+picks among the remaining candidates.
 
 Ties are broken by PATH order and then alphabetically, so the same tree always
 gives the same plan. An existing plan file is never overwritten without

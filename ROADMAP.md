@@ -33,7 +33,7 @@ Estimates are rough working hours for one person.
 
 ## v0.4: smarter plans (about 3 h)
 
-- [ ] `--keep-pattern GLOB` / `--remove-pattern GLOB` to prefer or target
+- [x] `--keep-pattern GLOB` / `--remove-pattern GLOB` to prefer or target
       copies by path (for example "always remove from Downloads")
 - [ ] Keep strategies combinable as tie-breakers (`--keep first-in,oldest`)
 - [ ] `dupefind plan --from-scan scan.json` to plan from saved `--json` output

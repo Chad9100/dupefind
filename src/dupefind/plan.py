@@ -7,6 +7,7 @@ passed to ``dupefind apply``, so it can be reviewed (and edited) first.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import tempfile
@@ -31,14 +32,35 @@ class PlanError(Exception):
     """The plan file is missing, unreadable or malformed."""
 
 
-def choose_keep(files: Sequence[FileInfo], strategy: str) -> FileInfo:
+def path_matches(path: str, patterns: Sequence[str]) -> bool:
+    """True if the file name or the full path (any separator) matches a glob."""
+    name = os.path.basename(path)
+    full = path.replace("\\", "/")
+    return any(fnmatch.fnmatch(name, p) or fnmatch.fnmatch(full, p) for p in patterns)
+
+
+def choose_keep(
+    files: Sequence[FileInfo],
+    strategy: str,
+    *,
+    keep_patterns: Sequence[str] = (),
+    remove_patterns: Sequence[str] = (),
+) -> FileInfo:
     """Pick the copy to keep.
 
     oldest / newest use modification time; shortest-path uses path length;
     first-in prefers the earliest PATH given on the command line. Ties fall
     back to PATH order and then alphabetical path order, so the choice is
     deterministic.
+
+    ``keep_patterns`` narrow the candidates to copies matching a glob, then
+    ``remove_patterns`` drop copies matching a glob; a filter that would leave
+    no candidate is ignored, so one copy is always kept.
     """
+    if keep_patterns:
+        files = [f for f in files if path_matches(f.path, keep_patterns)] or list(files)
+    if remove_patterns:
+        files = [f for f in files if not path_matches(f.path, remove_patterns)] or list(files)
     if strategy == "oldest":
         key = lambda f: (f.mtime, f.root_index, f.path)  # noqa: E731
     elif strategy == "newest":
@@ -52,8 +74,12 @@ def choose_keep(files: Sequence[FileInfo], strategy: str) -> FileInfo:
     return min(files, key=key)
 
 
-def _group_entry(group: DupGroup, strategy: str) -> dict:
-    keep = choose_keep(group.files, strategy)
+def _group_entry(
+    group: DupGroup, strategy: str, keep_patterns: Sequence[str], remove_patterns: Sequence[str]
+) -> dict:
+    keep = choose_keep(
+        group.files, strategy, keep_patterns=keep_patterns, remove_patterns=remove_patterns
+    )
     return {
         "size": group.size,
         "sha256": group.sha256,
@@ -62,9 +88,16 @@ def _group_entry(group: DupGroup, strategy: str) -> dict:
     }
 
 
-def build_plan(result: ScanResult, strategy: str, *, now: datetime | None = None) -> dict:
+def build_plan(
+    result: ScanResult,
+    strategy: str,
+    *,
+    now: datetime | None = None,
+    keep_patterns: Sequence[str] = (),
+    remove_patterns: Sequence[str] = (),
+) -> dict:
     now = now or datetime.now(timezone.utc)
-    groups = [_group_entry(g, strategy) for g in result.groups]
+    groups = [_group_entry(g, strategy, keep_patterns, remove_patterns) for g in result.groups]
     return {
         "dupefind_plan": PLAN_FORMAT,
         "_readme": _README,

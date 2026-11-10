@@ -44,6 +44,20 @@ def test_keep_ties_are_deterministic():
     assert choose_keep([b, a], "oldest") is b
 
 
+def test_keep_pattern_overrides_strategy():
+    # oldest would be r2/b.txt; the pattern forces the deep r1 copy
+    assert choose_keep(FILES, "oldest", keep_patterns=["*/deep/*"]) is FILES[0]
+
+
+def test_remove_pattern_avoids_matching_copy():
+    assert choose_keep(FILES, "oldest", remove_patterns=["b.txt"]) is FILES[2]
+
+
+def test_patterns_that_match_nothing_or_everything_are_ignored():
+    assert choose_keep(FILES, "oldest", keep_patterns=["*.nomatch"]) is FILES[1]
+    assert choose_keep(FILES, "oldest", remove_patterns=["*.txt"]) is FILES[1]
+
+
 def test_unknown_strategy():
     with pytest.raises(ValueError):
         choose_keep(FILES, "random")

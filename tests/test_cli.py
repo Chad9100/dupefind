@@ -99,6 +99,20 @@ def test_plan_first_in(tmp_path, capsys):
     assert data["groups"][0]["keep"] == str(tmp_path / "master" / "x")
 
 
+def test_plan_remove_and_keep_pattern(tmp_path):
+    write(tmp_path / "Downloads" / "x", "content")
+    write(tmp_path / "Archive" / "x", "content")
+    for flag, glob in (("--remove-pattern", "*/Downloads/*"), ("--keep-pattern", "*/Archive/*")):
+        plan = tmp_path / "plan.json"
+        plan.unlink(missing_ok=True)
+        # first-in would keep Downloads (listed first); the pattern overrides it
+        assert main(["plan", str(tmp_path / "Downloads"), str(tmp_path / "Archive"),
+                     "--keep", "first-in", flag, glob, "-o", str(plan)]) == 0
+        data = json.loads(plan.read_text("utf-8"))
+        assert data["groups"][0]["keep"] == str(tmp_path / "Archive" / "x")
+        assert data["groups"][0]["remove"] == [str(tmp_path / "Downloads" / "x")]
+
+
 def test_plan_refuses_overwrite(tree, tmp_path, capsys):
     plan = tmp_path / "plan.json"
     plan.write_text("keep me")

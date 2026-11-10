@@ -119,6 +119,14 @@ def build_parser() -> argparse.ArgumentParser:
         "or first-in (the copy under the earliest PATH argument). Default: oldest",
     )
     plan.add_argument(
+        "--keep-pattern", action="append", default=[], metavar="GLOB",
+        help="prefer keeping copies whose name or path matches GLOB (repeatable)",
+    )
+    plan.add_argument(
+        "--remove-pattern", action="append", default=[], metavar="GLOB",
+        help="prefer removing copies whose name or path matches GLOB (repeatable)",
+    )
+    plan.add_argument(
         "-o", "--output", default=DEFAULT_PLAN, metavar="FILE",
         help=f"plan file to write (default: {DEFAULT_PLAN})",
     )
@@ -218,7 +226,10 @@ def _cmd_plan(args) -> int:
     if not result.groups:
         print(f"Scanned {result.files_scanned:,} files: no duplicates found; no plan written.")
         return 0
-    plan = build_plan(result, args.keep)
+    plan = build_plan(
+        result, args.keep,
+        keep_patterns=args.keep_pattern, remove_patterns=args.remove_pattern,
+    )
     try:
         write_plan(plan, args.output, force=args.force)
     except FileExistsError as exc:
