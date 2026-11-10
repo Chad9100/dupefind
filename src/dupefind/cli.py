@@ -10,6 +10,7 @@ from typing import Sequence
 
 from . import __version__
 from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
+from .progress import ProgressLine, stream_is_tty
 from .plan import STRATEGIES, PlanError, build_plan, load_plan, write_plan
 from .report import format_size, parse_size, render_report, result_to_dict
 from .purge import KEPT, parse_age, purge_quarantine
@@ -58,6 +59,10 @@ def _scan_options() -> argparse.ArgumentParser:
         default=[],
         metavar="GLOB",
         help="skip files and folders whose name or relative path matches GLOB (repeatable)",
+    )
+    p.add_argument(
+        "-q", "--quiet", action="store_true",
+        help="no progress line on stderr (it is shown only when stderr is a terminal)",
     )
     return p
 
@@ -150,10 +155,22 @@ def _warn_errors(result) -> None:
         print(f"dupefind: warning: {err.path}: {err.message}", file=sys.stderr)
 
 
+def _run_scan(args):
+    progress = None
+    if not args.quiet and stream_is_tty(sys.stderr):
+        progress = ProgressLine(sys.stderr)
+    try:
+        return find_duplicates(
+            args.paths, include=args.include, exclude=args.exclude,
+            min_size=args.min_size, progress=progress,
+        )
+    finally:
+        if progress is not None:
+            progress.finish()
+
+
 def _cmd_scan(args) -> int:
-    result = find_duplicates(
-        args.paths, include=args.include, exclude=args.exclude, min_size=args.min_size
-    )
+    result = _run_scan(args)
     if args.json:
         print(json.dumps(result_to_dict(result), indent=2, ensure_ascii=False))
     else:
@@ -163,9 +180,7 @@ def _cmd_scan(args) -> int:
 
 
 def _cmd_plan(args) -> int:
-    result = find_duplicates(
-        args.paths, include=args.include, exclude=args.exclude, min_size=args.min_size
-    )
+    result = _run_scan(args)
     _warn_errors(result)
     if not result.groups:
         print(f"Scanned {result.files_scanned:,} files: no duplicates found; no plan written.")

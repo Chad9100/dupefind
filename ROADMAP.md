@@ -22,7 +22,7 @@ Estimates are rough working hours for one person.
 
 ## v0.3: progress and speed (about 4 h)
 
-- [ ] Progress line on stderr for long scans (files seen, bytes hashed),
+- [x] Progress line on stderr for long scans (files seen, bytes hashed),
       off when not a TTY or with `--quiet`
 - [ ] Hash files in a thread pool (`--jobs N`); benchmark on a large tree
 - [ ] Optional hash cache keyed by path, size and mtime (`--cache FILE`) so

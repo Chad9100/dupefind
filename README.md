@@ -35,7 +35,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
-                      [--json] [--limit N]
+                      [--json] [--limit N] [--quiet]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -46,6 +46,10 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   `--exclude` also prunes whole folders.
 - `--json` prints machine-readable output (all groups, sizes, mtimes, errors).
 - `--limit N` caps how many groups the human report lists (default 20, 0 = all).
+- While scanning, a single progress line on stderr shows files seen and bytes
+  hashed so far. It is only drawn when stderr is a terminal (so pipes, logs and
+  `--json` output stay clean) and is erased before the report prints.
+  `-q` / `--quiet` turns it off; `plan` accepts the same flag.
 
 ### Plan
 

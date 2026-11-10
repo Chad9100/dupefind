@@ -14,7 +14,7 @@ import os
 import stat
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator, Sequence
+from typing import Callable, Iterable, Iterator, Sequence
 
 CHUNK_SIZE = 64 * 1024
 READ_BLOCK = 1024 * 1024
@@ -59,6 +59,7 @@ class ScanResult:
     files_scanned: int = 0
     bytes_scanned: int = 0
     hardlinks_skipped: int = 0
+    bytes_hashed: int = 0
 
     @property
     def wasted(self) -> int:
@@ -212,16 +213,25 @@ def _drop_hardlinks(files: list[FileInfo], errors: list[ScanError]) -> tuple[lis
     return kept, dropped
 
 
+ProgressCallback = Callable[[int, int], None]
+
+
 def _hash_bucket(
-    files: Iterable[FileInfo], limit: int | None, errors: list[ScanError]
+    files: Iterable[FileInfo],
+    limit: int | None,
+    result: ScanResult,
+    progress: ProgressCallback | None = None,
 ) -> dict[str, list[FileInfo]]:
     buckets: dict[str, list[FileInfo]] = defaultdict(list)
     for f in files:
         try:
             digest = hash_file(f.path, limit)
         except OSError as exc:
-            errors.append(ScanError(f.path, _error_text(exc)))
+            result.errors.append(ScanError(f.path, _error_text(exc)))
             continue
+        result.bytes_hashed += f.size if limit is None else min(f.size, limit)
+        if progress is not None:
+            progress(result.files_scanned, result.bytes_hashed)
         buckets[digest].append(f)
     return buckets
 
@@ -232,8 +242,13 @@ def find_duplicates(
     include: Sequence[str] = (),
     exclude: Sequence[str] = (),
     min_size: int = 1,
+    progress: ProgressCallback | None = None,
 ) -> ScanResult:
-    """Scan ``roots`` and return groups of byte-identical files."""
+    """Scan ``roots`` and return groups of byte-identical files.
+
+    ``progress``, if given, is called as ``progress(files_seen, bytes_hashed)``
+    after each file is found and after each file is hashed.
+    """
     result = ScanResult(roots=[os.path.abspath(r) for r in roots])
     errors = result.errors
 
@@ -244,6 +259,8 @@ def find_duplicates(
         result.files_scanned += 1
         result.bytes_scanned += info.size
         by_size[info.size].append(info)
+        if progress is not None:
+            progress(result.files_scanned, result.bytes_hashed)
 
     groups: list[DupGroup] = []
     for size, same_size in by_size.items():
@@ -253,14 +270,14 @@ def find_duplicates(
         result.hardlinks_skipped += dropped
         if len(same_size) < 2:
             continue
-        for head_digest, same_head in _hash_bucket(same_size, CHUNK_SIZE, errors).items():
+        for head_digest, same_head in _hash_bucket(same_size, CHUNK_SIZE, result, progress).items():
             if len(same_head) < 2:
                 continue
             if size <= CHUNK_SIZE:
                 # The first 64 KiB is the whole file, so this is the full hash.
                 full = {head_digest: same_head}
             else:
-                full = _hash_bucket(same_head, None, errors)
+                full = _hash_bucket(same_head, None, result, progress)
             for digest, members in full.items():
                 if len(members) < 2:
                     continue
