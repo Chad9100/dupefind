@@ -35,6 +35,22 @@ def _plural(n: int, word: str, plural: str | None = None) -> str:
     return f"{n:,} {word if n == 1 else (plural or word + 's')}"
 
 
+SORT_KEYS = ("wasted", "size", "count", "path")
+
+
+def sort_groups(groups: list, key: str) -> list:
+    """Return groups ordered by ``key``; ties fall back to the first path."""
+    if key == "wasted":
+        return sorted(groups, key=lambda g: (-g.wasted, g.files[0].path))
+    if key == "size":
+        return sorted(groups, key=lambda g: (-g.size, g.files[0].path))
+    if key == "count":
+        return sorted(groups, key=lambda g: (-len(g.files), g.files[0].path))
+    if key == "path":
+        return sorted(groups, key=lambda g: g.files[0].path)
+    raise ValueError(f"unknown sort key: {key!r} (choose from {', '.join(SORT_KEYS)})")
+
+
 def render_report(result: ScanResult, *, limit: int | None = None) -> str:
     lines = [
         f"Scanned {_plural(result.files_scanned, 'file')} "

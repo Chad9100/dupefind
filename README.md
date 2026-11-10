@@ -35,7 +35,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
-                      [--json] [--limit N] [--quiet] [--jobs N] [--cache FILE]
+                      [--json] [--limit N] [--sort KEY] [--quiet] [--jobs N] [--cache FILE]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -45,7 +45,12 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   `--include "*.jpg"`, `--exclude .git` and `--exclude "build/*"` all work.
   `--exclude` also prunes whole folders.
 - `--json` prints machine-readable output (all groups, sizes, mtimes, errors).
-- `--limit N` caps how many groups the human report lists (default 20, 0 = all).
+- `--limit N` (alias `--top N`) caps how many groups the human report lists
+  (default 20, 0 = all).
+- `--sort wasted|size|count|path` orders the groups (human report and `--json`).
+  `wasted` (the default) puts the biggest savings first, `size` the largest
+  files, `count` the most copies, `path` alphabetical by first path. Combine
+  with `--top`, e.g. `--sort size --top 5`.
 - While scanning, a single progress line on stderr shows files seen and bytes
   hashed so far. It is only drawn when stderr is a terminal (so pipes, logs and
   `--json` output stay clean) and is erased before the report prints.

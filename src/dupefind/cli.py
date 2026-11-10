@@ -20,7 +20,7 @@ def _keep_type(value: str) -> str:
         return keep_spec(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"{exc} (choose from {', '.join(STRATEGIES)})") from None
-from .report import format_size, parse_size, render_report, result_to_dict
+from .report import SORT_KEYS, format_size, parse_size, render_report, result_to_dict, sort_groups
 from .purge import KEPT, parse_age, purge_quarantine
 from .restore import RestoreError, restore_quarantine
 from .scanner import find_duplicates
@@ -111,8 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan.add_argument("--json", action="store_true", help="print machine-readable JSON")
     scan.add_argument(
-        "--limit", type=int, default=20, metavar="N",
+        "--limit", "--top", type=int, default=20, metavar="N", dest="limit",
         help="show at most N groups in the human report (0 = all; default 20)",
+    )
+    scan.add_argument(
+        "--sort", choices=SORT_KEYS, default="wasted",
+        help="order groups by wasted space (default), file size, copy count or path",
     )
 
     plan = sub.add_parser(
@@ -229,6 +233,7 @@ def _cmd_scan(args) -> int:
         print("dupefind: error: scan needs at least one PATH", file=sys.stderr)
         return 2
     result = _run_scan(args)
+    result.groups = sort_groups(result.groups, args.sort)
     if args.json:
         print(json.dumps(result_to_dict(result), indent=2, ensure_ascii=False))
     else:
