@@ -10,6 +10,7 @@ from typing import Sequence
 
 from . import __version__
 from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
+from .cache import HashCache
 from .progress import ProgressLine, stream_is_tty
 from .plan import STRATEGIES, PlanError, build_plan, load_plan, write_plan
 from .report import format_size, parse_size, render_report, result_to_dict
@@ -78,6 +79,11 @@ def _scan_options() -> argparse.ArgumentParser:
         "-j", "--jobs", type=_jobs_arg, default=1, metavar="N",
         help="hash up to N files at once in threads (default: 1); can speed up "
         "scans on SSDs and network drives, results are the same",
+    )
+    p.add_argument(
+        "--cache", metavar="FILE", default=None,
+        help="remember file hashes in FILE (created if missing) so repeat scans "
+        "skip files whose size and modification time are unchanged",
     )
     return p
 
@@ -174,14 +180,26 @@ def _run_scan(args):
     progress = None
     if not args.quiet and stream_is_tty(sys.stderr):
         progress = ProgressLine(sys.stderr)
+    cache = None
+    if args.cache:
+        cache = HashCache(args.cache)
+        if cache.warning:
+            print(f"dupefind: warning: {cache.warning}", file=sys.stderr)
     try:
-        return find_duplicates(
+        result = find_duplicates(
             args.paths, include=args.include, exclude=args.exclude,
-            min_size=args.min_size, progress=progress, jobs=args.jobs,
+            min_size=args.min_size, progress=progress, jobs=args.jobs, cache=cache,
         )
     finally:
         if progress is not None:
             progress.finish()
+    if cache is not None:
+        try:
+            cache.save()
+        except OSError as exc:
+            print(f"dupefind: warning: could not save cache {cache.path}: {exc}",
+                  file=sys.stderr)
+    return result
 
 
 def _cmd_scan(args) -> int:

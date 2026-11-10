@@ -35,7 +35,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
-                      [--json] [--limit N] [--quiet] [--jobs N]
+                      [--json] [--limit N] [--quiet] [--jobs N] [--cache FILE]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -55,6 +55,12 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   idle; on a single spinning disk more jobs can be slower because the head
   has to seek between files. The groups found are identical for any N.
   `plan` accepts it too.
+- `--cache FILE` keeps a JSON file of file hashes. On the next scan, a file
+  whose path, size and modification time are unchanged is not read again, so
+  repeat scans of a big tree are much faster. The file is created if missing,
+  rewritten atomically, and ignored with a warning if it is unreadable. A
+  changed size or mtime always forces a re-hash; `apply` never uses the cache
+  and re-hashes every file itself. `plan` accepts it too.
 
 ### Plan
 

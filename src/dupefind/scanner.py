@@ -17,6 +17,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Iterator, Sequence
 
+from .cache import HashCache
+
 CHUNK_SIZE = 64 * 1024
 READ_BLOCK = 1024 * 1024
 
@@ -61,6 +63,7 @@ class ScanResult:
     bytes_scanned: int = 0
     hardlinks_skipped: int = 0
     bytes_hashed: int = 0
+    cache_hits: int = 0
 
     @property
     def wasted(self) -> int:
@@ -231,6 +234,7 @@ def _hash_all(
     result: ScanResult,
     mapper: _Mapper,
     progress: ProgressCallback | None = None,
+    cache: HashCache | None = None,
 ) -> dict[tuple[int, str], list[FileInfo]]:
     """Hash ``files`` and bucket them by (size, digest).
 
@@ -239,12 +243,27 @@ def _hash_all(
     ``progress`` are never touched concurrently.
     """
     buckets: dict[tuple[int, str], list[FileInfo]] = defaultdict(list)
-    outcomes = mapper(lambda f: _try_hash(f.path, limit), files)
-    for f, (digest, exc) in zip(files, outcomes):
-        if exc is not None:
-            result.errors.append(ScanError(f.path, _error_text(exc)))
-            continue
-        result.bytes_hashed += f.size if limit is None else min(f.size, limit)
+    digests: dict[str, str] = {}
+    todo: list[FileInfo] = []
+    for f in files:
+        cached = cache.get(f.path, f.size, f.mtime, limit) if cache is not None else None
+        if cached is None:
+            todo.append(f)
+        else:
+            digests[f.path] = cached
+    outcomes = iter(mapper(lambda f: _try_hash(f.path, limit), todo))
+    for f in files:
+        digest = digests.get(f.path)
+        if digest is not None:
+            result.cache_hits += 1
+        else:
+            digest, exc = next(outcomes)
+            if exc is not None:
+                result.errors.append(ScanError(f.path, _error_text(exc)))
+                continue
+            result.bytes_hashed += f.size if limit is None else min(f.size, limit)
+            if cache is not None:
+                cache.put(f.path, f.size, f.mtime, limit, digest)
         if progress is not None:
             progress(result.files_scanned, result.bytes_hashed)
         buckets[(f.size, digest)].append(f)
@@ -259,6 +278,7 @@ def find_duplicates(
     min_size: int = 1,
     progress: ProgressCallback | None = None,
     jobs: int = 1,
+    cache: HashCache | None = None,
 ) -> ScanResult:
     """Scan ``roots`` and return groups of byte-identical files.
 
@@ -267,6 +287,9 @@ def find_duplicates(
 
     ``jobs`` is the number of threads that hash files at the same time. The
     result is identical for any value; only the speed changes.
+
+    ``cache``, if given, supplies digests for files whose size and mtime are
+    unchanged and records new ones; the caller saves it.
     """
     if jobs < 1:
         raise ValueError("jobs must be at least 1")
@@ -299,7 +322,7 @@ def find_duplicates(
     try:
         matches: list[tuple[int, str, list[FileInfo]]] = []
         need_full: list[FileInfo] = []
-        heads = _hash_all(candidates, CHUNK_SIZE, result, mapper, progress)
+        heads = _hash_all(candidates, CHUNK_SIZE, result, mapper, progress, cache)
         for (size, head_digest), same_head in heads.items():
             if len(same_head) < 2:
                 continue
@@ -308,7 +331,7 @@ def find_duplicates(
                 matches.append((size, head_digest, same_head))
             else:
                 need_full.extend(same_head)
-        fulls = _hash_all(need_full, None, result, mapper, progress)
+        fulls = _hash_all(need_full, None, result, mapper, progress, cache)
         matches.extend((size, digest, members) for (size, digest), members in fulls.items())
     except BaseException:
         if pool is not None:

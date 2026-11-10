@@ -28,7 +28,7 @@ Estimates are rough working hours for one person.
       result for any N
 - [ ] Benchmark `--jobs` on a large tree (SSD, HDD, network share) and pick
       a better default than 1 (split out of the item above)
-- [ ] Optional hash cache keyed by path, size and mtime (`--cache FILE`) so
+- [x] Optional hash cache keyed by path, size and mtime (`--cache FILE`) so
       repeat scans skip unchanged files
 
 ## v0.4: smarter plans (about 3 h)
