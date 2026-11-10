@@ -9,6 +9,7 @@ extra copies **without ever deleting anything you have not reviewed**:
 3. You read (and, if you like, edit) the plan.
 4. `dupefind apply` re-checks every file and moves the extras to a quarantine
    folder, or deletes them if you ask for `--delete`.
+5. Changed your mind? `dupefind restore` moves quarantined files back.
 
 **Who it is for:** anyone cleaning up photo folders, old backups or download
 directories who wants a tool that is careful by default and leaves a paper
@@ -84,6 +85,32 @@ and prints what would happen without changing anything.
 
 Exit status: `0` when everything in the plan was done, `1` when some files
 were skipped (the rest still ran), `2` for a bad plan file or usage error.
+
+### Restore
+
+```sh
+dupefind restore QUARANTINE_DIR [--dry-run]
+```
+
+Moves quarantined files back to their original paths, using the folder's
+`manifest.jsonl`. Each file is re-checked first: it must still be a regular
+file with the recorded size and SHA-256, and it must lie inside the quarantine
+folder (a hand-edited manifest cannot make `restore` move files from
+elsewhere). **An existing file at the original path is never overwritten**;
+that record is skipped and reported. `--dry-run` shows what would happen.
+
+After a restore the manifest lists only the files still in quarantine, so a
+second run picks up where the first left off, and emptied subfolders are
+removed. Exit status follows `apply`: `0` all restored, `1` some skipped,
+`2` not a quarantine folder.
+
+```text
+$ dupefind restore dupefind-quarantine
+restored  C:\work\photos\beach (copy).jpg
+restored  C:\work\backup\photos\beach.jpg
+skipped   C:\work\docs\report.pdf: a file now exists at the original path; not overwriting
+Restored 2 files (6.0 MiB), skipped 1
+```
 
 ### Example
 
@@ -177,7 +204,7 @@ free nothing).
 - **Nothing is deleted without a plan.** `scan` and `plan` never modify your
   files; only `apply PLAN` does, and only for paths listed in that plan.
 - **Quarantine by default.** `apply` moves files unless you pass `--delete`,
-  and writes a manifest so every move can be undone by hand.
+  and writes a manifest so every move can be undone with `dupefind restore`.
 - **Re-verified before acting.** For each group the kept copy must still exist
   with the planned SHA-256, otherwise the whole group is skipped. Each extra
   copy must still be a regular file of the planned size and hash.

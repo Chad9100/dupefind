@@ -1,4 +1,4 @@
-"""Command-line interface: ``dupefind scan | plan | apply``."""
+"""Command-line interface: ``dupefind scan | plan | apply | restore``."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from . import __version__
 from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
 from .plan import STRATEGIES, PlanError, build_plan, load_plan, write_plan
 from .report import format_size, parse_size, render_report, result_to_dict
+from .restore import RestoreError, restore_quarantine
 from .scanner import find_duplicates
 
 DEFAULT_PLAN = "dupefind-plan.json"
@@ -101,6 +102,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apply.add_argument("--delete", action="store_true", help="delete extra copies instead of moving")
     apply.add_argument("--dry-run", action="store_true", help="verify and show what would happen")
+
+    restore = sub.add_parser(
+        "restore", help="move quarantined files back to where they came from",
+        description="Read manifest.jsonl in QUARANTINE_DIR, re-verify each file and move it "
+        "back to its original path. A file that now exists at the original path is never "
+        "overwritten.",
+    )
+    restore.add_argument(
+        "quarantine", metavar="QUARANTINE_DIR",
+        help="quarantine folder written by 'dupefind apply'",
+    )
+    restore.add_argument("--dry-run", action="store_true", help="verify and show what would happen")
     return parser
 
 
@@ -190,6 +203,30 @@ def _cmd_apply(args) -> int:
     return 1 if report.skipped else 0
 
 
+def _cmd_restore(args) -> int:
+    try:
+        report = restore_quarantine(args.quarantine, dry_run=args.dry_run)
+    except RestoreError as exc:
+        print(f"dupefind: error: {exc}", file=sys.stderr)
+        return 2
+
+    width = max((len(a.status) for a in report.actions), default=0)
+    for a in report.actions:
+        line = f"{a.status:<{width}}  {a.path}"
+        if a.status == SKIPPED:
+            line += f": {a.detail}"
+        print(line)
+
+    n = f"{_files(len(report.done))} ({format_size(report.restored_bytes)})"
+    summary = f"Dry run: would have restored {n}" if args.dry_run else f"Restored {n}"
+    if report.skipped:
+        summary += f", skipped {len(report.skipped):,}"
+    if not report.actions:
+        summary = "Quarantine manifest is empty; nothing to restore."
+    print(summary)
+    return 1 if report.skipped else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -197,7 +234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AttributeError, ValueError):
             pass
     args = build_parser().parse_args(argv)
-    handlers = {"scan": _cmd_scan, "plan": _cmd_plan, "apply": _cmd_apply}
+    handlers = {"scan": _cmd_scan, "plan": _cmd_plan, "apply": _cmd_apply, "restore": _cmd_restore}
     try:
         return handlers[args.command](args)
     except KeyboardInterrupt:
