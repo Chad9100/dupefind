@@ -80,7 +80,7 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
 ### Plan
 
 ```sh
-dupefind plan PATH... [scan options] [--keep STRATEGY[,STRATEGY...]]
+dupefind plan (PATH... | --from-scan SCAN_JSON) [scan options] [--keep STRATEGY[,STRATEGY...]]
                       [--keep-pattern GLOB] [--remove-pattern GLOB]
                       [-o dupefind-plan.json] [--force]
 ```
@@ -106,6 +106,12 @@ candidates. Globs match the file name or the full path (written with `/`), so
 another copy exists. A pattern that would leave no candidate in a group is
 ignored for that group, so one copy is always kept; the `--keep` strategy then
 picks among the remaining candidates.
+
+`--from-scan SCAN_JSON` builds the plan from saved `dupefind scan PATH --json > scan.json`
+output instead of scanning again (do not pass PATH). Useful for a slow scan you
+want to plan several ways. `first-in` follows the root order of the saved scan.
+The files are not re-read when planning; `apply` still re-hashes every file, so
+a stale scan can only cause skips, never a wrong delete.
 
 Ties are broken by PATH order and then alphabetically, so the same tree always
 gives the same plan. An existing plan file is never overwritten without

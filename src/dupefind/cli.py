@@ -12,7 +12,7 @@ from . import __version__
 from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
 from .cache import HashCache
 from .progress import ProgressLine, stream_is_tty
-from .plan import STRATEGIES, PlanError, build_plan, keep_spec, load_plan, write_plan
+from .plan import STRATEGIES, PlanError, build_plan, keep_spec, load_plan, load_scan, write_plan
 
 
 def _keep_type(value: str) -> str:
@@ -55,7 +55,7 @@ def _age_arg(text: str):
 
 def _scan_options() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("paths", nargs="+", metavar="PATH", help="files or folders to scan")
+    p.add_argument("paths", nargs="*", metavar="PATH", help="files or folders to scan")
     p.add_argument(
         "--min-size",
         type=_size_arg,
@@ -140,6 +140,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"plan file to write (default: {DEFAULT_PLAN})",
     )
     plan.add_argument("--force", action="store_true", help="overwrite an existing plan file")
+    plan.add_argument(
+        "--from-scan", metavar="SCAN_JSON", default=None,
+        help="build the plan from saved 'dupefind scan --json' output instead of "
+        "scanning (PATH and scan options are not used)",
+    )
 
     apply = sub.add_parser(
         "apply", help="carry out a plan (quarantine by default)",
@@ -220,6 +225,9 @@ def _run_scan(args):
 
 
 def _cmd_scan(args) -> int:
+    if not args.paths:
+        print("dupefind: error: scan needs at least one PATH", file=sys.stderr)
+        return 2
     result = _run_scan(args)
     if args.json:
         print(json.dumps(result_to_dict(result), indent=2, ensure_ascii=False))
@@ -230,7 +238,20 @@ def _cmd_scan(args) -> int:
 
 
 def _cmd_plan(args) -> int:
-    result = _run_scan(args)
+    if args.from_scan:
+        if args.paths:
+            print("dupefind: error: PATH cannot be combined with --from-scan", file=sys.stderr)
+            return 2
+        try:
+            result = load_scan(args.from_scan)
+        except PlanError as exc:
+            print(f"dupefind: error: {exc}", file=sys.stderr)
+            return 2
+    else:
+        if not args.paths:
+            print("dupefind: error: plan needs PATH or --from-scan", file=sys.stderr)
+            return 2
+        result = _run_scan(args)
     _warn_errors(result)
     if not result.groups:
         print(f"Scanned {result.files_scanned:,} files: no duplicates found; no plan written.")

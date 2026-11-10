@@ -199,3 +199,55 @@ def load_plan(path: str) -> dict:
     except json.JSONDecodeError as exc:
         raise PlanError(f"plan {path} is not valid JSON: {exc}") from None
     return validate_plan(data)
+
+
+def _root_index(path: str, roots: Sequence[str]) -> int:
+    """Index of the first scanned root that contains ``path`` (0 if none does)."""
+    norm = os.path.normcase(os.path.abspath(path))
+    for i, root in enumerate(roots):
+        base = os.path.normcase(os.path.abspath(root))
+        if norm == base or norm.startswith(base.rstrip("\\/") + os.sep):
+            return i
+    return 0
+
+
+def load_scan(path: str) -> ScanResult:
+    """Load the output of ``dupefind scan --json`` as a ScanResult."""
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except OSError as exc:
+        raise PlanError(f"cannot read scan {path}: {exc.strerror or exc}") from None
+    except json.JSONDecodeError as exc:
+        raise PlanError(f"scan {path} is not valid JSON: {exc}") from None
+    _require(
+        isinstance(data, dict) and isinstance(data.get("groups"), list)
+        and isinstance(data.get("roots"), list),
+        f"{path} is not output of 'dupefind scan --json'",
+    )
+    roots = [str(r) for r in data["roots"]]
+    groups = []
+    for i, g in enumerate(data["groups"], 1):
+        where = f"scan group {i}"
+        _require(isinstance(g, dict), f"{where} must be an object")
+        files = g.get("files")
+        _require(
+            isinstance(files, list) and len(files) >= 2 and all(
+                isinstance(f, dict) and isinstance(f.get("path"), str) and f["path"]
+                and isinstance(f.get("mtime"), (int, float)) for f in files
+            ),
+            f"{where}: 'files' must list at least two {{path, mtime}} objects",
+        )
+        size, digest = g.get("size"), g.get("sha256")
+        _require(isinstance(size, int) and not isinstance(size, bool) and size >= 0,
+                 f"{where}: 'size' must be a non-negative integer")
+        _require(isinstance(digest, str) and len(digest) == 64, f"{where}: bad 'sha256'")
+        groups.append(DupGroup(size, digest, [
+            FileInfo(f["path"], size, float(f["mtime"]), _root_index(f["path"], roots))
+            for f in files
+        ]))
+    return ScanResult(
+        roots=roots, groups=groups,
+        files_scanned=int(data.get("files_scanned", 0) or 0),
+        bytes_scanned=int(data.get("bytes_scanned", 0) or 0),
+    )
