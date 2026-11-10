@@ -1,4 +1,4 @@
-"""Command-line interface: ``dupefind scan | plan | apply | restore``."""
+"""Command-line interface: ``dupefind scan | plan | apply | restore | purge``."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from . import __version__
 from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
 from .plan import STRATEGIES, PlanError, build_plan, load_plan, write_plan
 from .report import format_size, parse_size, render_report, result_to_dict
+from .purge import KEPT, parse_age, purge_quarantine
 from .restore import RestoreError, restore_quarantine
 from .scanner import find_duplicates
 
@@ -22,6 +23,13 @@ DEFAULT_QUARANTINE = "dupefind-quarantine"
 def _size_arg(text: str) -> int:
     try:
         return parse_size(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _age_arg(text: str):
+    try:
+        return parse_age(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
 
@@ -114,6 +122,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="quarantine folder written by 'dupefind apply'",
     )
     restore.add_argument("--dry-run", action="store_true", help="verify and show what would happen")
+
+    purge = sub.add_parser(
+        "purge", help="permanently delete files quarantined long ago",
+        description="Delete files in QUARANTINE_DIR whose manifest.jsonl record is older "
+        "than AGE. Each file is re-verified first; files not in the manifest are never "
+        "touched. This cannot be undone.",
+    )
+    purge.add_argument(
+        "quarantine", metavar="QUARANTINE_DIR",
+        help="quarantine folder written by 'dupefind apply'",
+    )
+    purge.add_argument(
+        "--older-than", type=_age_arg, required=True, metavar="AGE",
+        help="only purge files quarantined more than AGE ago: 90m, 12h, 30d, 2w",
+    )
+    purge.add_argument("--dry-run", action="store_true", help="verify and show what would happen")
     return parser
 
 
@@ -227,6 +251,33 @@ def _cmd_restore(args) -> int:
     return 1 if report.skipped else 0
 
 
+def _cmd_purge(args) -> int:
+    try:
+        report = purge_quarantine(args.quarantine, args.older_than, dry_run=args.dry_run)
+    except RestoreError as exc:
+        print(f"dupefind: error: {exc}", file=sys.stderr)
+        return 2
+
+    shown = [a for a in report.actions if a.status != KEPT]
+    width = max((len(a.status) for a in shown), default=0)
+    for a in shown:
+        line = f"{a.status:<{width}}  {a.dest or a.path}"
+        if a.status == SKIPPED:
+            line += f": {a.detail}"
+        print(line)
+
+    n = f"{_files(len(report.done))} ({format_size(report.freed_bytes)})"
+    summary = f"Dry run: would have purged {n}" if args.dry_run else f"Purged {n}"
+    if report.kept:
+        summary += f", kept {len(report.kept):,} newer"
+    if report.skipped:
+        summary += f", skipped {len(report.skipped):,}"
+    if not report.actions:
+        summary = "Quarantine manifest is empty; nothing to purge."
+    print(summary)
+    return 1 if report.skipped else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -234,7 +285,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AttributeError, ValueError):
             pass
     args = build_parser().parse_args(argv)
-    handlers = {"scan": _cmd_scan, "plan": _cmd_plan, "apply": _cmd_apply, "restore": _cmd_restore}
+    handlers = {
+        "scan": _cmd_scan,
+        "plan": _cmd_plan,
+        "apply": _cmd_apply,
+        "restore": _cmd_restore,
+        "purge": _cmd_purge,
+    }
     try:
         return handlers[args.command](args)
     except KeyboardInterrupt:

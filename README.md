@@ -10,6 +10,7 @@ extra copies **without ever deleting anything you have not reviewed**:
 4. `dupefind apply` re-checks every file and moves the extras to a quarantine
    folder, or deletes them if you ask for `--delete`.
 5. Changed your mind? `dupefind restore` moves quarantined files back.
+6. Sure you won't? `dupefind purge --older-than 30d` empties old quarantines.
 
 **Who it is for:** anyone cleaning up photo folders, old backups or download
 directories who wants a tool that is careful by default and leaves a paper
@@ -112,6 +113,31 @@ skipped   C:\work\docs\report.pdf: a file now exists at the original path; not o
 Restored 2 files (6.0 MiB), skipped 1
 ```
 
+### Purge
+
+```sh
+dupefind purge QUARANTINE_DIR --older-than AGE [--dry-run]
+```
+
+Permanently deletes quarantined files that were moved there more than `AGE`
+ago, judged by the `time` each `apply` wrote to `manifest.jsonl`. `AGE` is a
+number with a unit: `90m`, `12h`, `30d`, `2w` (`0d` purges everything).
+Only files listed in the manifest are deleted, and each is checked first just
+like `restore` does: it must lie inside the quarantine folder and still have
+the recorded size and SHA-256, so a hand-edited manifest cannot point `purge`
+at files elsewhere. Newer files stay, and the manifest is rewritten to list
+only what remains. Exit status follows `restore`.
+
+```text
+$ dupefind purge dupefind-quarantine --older-than 30d --dry-run
+would purge  C:\work\dupefind-quarantine\photos\beach.jpg
+Dry run: would have purged 1 file (3.0 MiB), kept 2 newer
+
+$ dupefind purge dupefind-quarantine --older-than 30d
+purged  C:\work\dupefind-quarantine\photos\beach.jpg
+Purged 1 file (3.0 MiB), kept 2 newer
+```
+
 ### Example
 
 Captured from a real run (the working folder prefix is shortened to `C:\work`):
@@ -203,6 +229,8 @@ free nothing).
 
 - **Nothing is deleted without a plan.** `scan` and `plan` never modify your
   files; only `apply PLAN` does, and only for paths listed in that plan.
+  `purge` deletes only files that `apply` recorded in a quarantine manifest,
+  after checking they are unchanged.
 - **Quarantine by default.** `apply` moves files unless you pass `--delete`,
   and writes a manifest so every move can be undone with `dupefind restore`.
 - **Re-verified before acting.** For each group the kept copy must still exist

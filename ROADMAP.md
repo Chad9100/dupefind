@@ -18,7 +18,7 @@ Estimates are rough working hours for one person.
 
 - [x] `dupefind restore QUARANTINE_DIR` moves files back using `manifest.jsonl`
 - [x] `--dry-run`, refuses to overwrite a file that now exists at the original path
-- [ ] `dupefind purge QUARANTINE_DIR --older-than 30d` to empty old quarantines
+- [x] `dupefind purge QUARANTINE_DIR --older-than 30d` to empty old quarantines
 
 ## v0.3: progress and speed (about 4 h)
 
