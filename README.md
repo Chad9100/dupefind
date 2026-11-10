@@ -35,7 +35,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
-                      [--json] [--limit N] [--quiet]
+                      [--json] [--limit N] [--quiet] [--jobs N]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -50,6 +50,11 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   hashed so far. It is only drawn when stderr is a terminal (so pipes, logs and
   `--json` output stay clean) and is erased before the report prints.
   `-q` / `--quiet` turns it off; `plan` accepts the same flag.
+- `-j N` / `--jobs N` hashes up to N files at once in threads (default 1).
+  This can help on SSDs and network drives, where one reader leaves the disk
+  idle; on a single spinning disk more jobs can be slower because the head
+  has to seek between files. The groups found are identical for any N.
+  `plan` accepts it too.
 
 ### Plan
 

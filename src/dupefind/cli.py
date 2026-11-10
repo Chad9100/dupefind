@@ -28,6 +28,16 @@ def _size_arg(text: str) -> int:
         raise argparse.ArgumentTypeError(str(exc)) from None
 
 
+def _jobs_arg(text: str) -> int:
+    try:
+        n = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number: {text!r}") from None
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return n
+
+
 def _age_arg(text: str):
     try:
         return parse_age(text)
@@ -63,6 +73,11 @@ def _scan_options() -> argparse.ArgumentParser:
     p.add_argument(
         "-q", "--quiet", action="store_true",
         help="no progress line on stderr (it is shown only when stderr is a terminal)",
+    )
+    p.add_argument(
+        "-j", "--jobs", type=_jobs_arg, default=1, metavar="N",
+        help="hash up to N files at once in threads (default: 1); can speed up "
+        "scans on SSDs and network drives, results are the same",
     )
     return p
 
@@ -162,7 +177,7 @@ def _run_scan(args):
     try:
         return find_duplicates(
             args.paths, include=args.include, exclude=args.exclude,
-            min_size=args.min_size, progress=progress,
+            min_size=args.min_size, progress=progress, jobs=args.jobs,
         )
     finally:
         if progress is not None:
