@@ -101,6 +101,11 @@ def _scan_options() -> argparse.ArgumentParser:
         help="remember file hashes in FILE (created if missing) so repeat scans "
         "skip files whose size and modification time are unchanged",
     )
+    p.add_argument(
+        "--one-file-system", action="store_true",
+        help="do not enter folders on a different device than the starting folder "
+        "(mount points, other drives)",
+    )
     return p
 
 
@@ -239,6 +244,7 @@ def _run_scan(args):
         result = find_duplicates(
             args.paths, include=args.include, exclude=args.exclude,
             min_size=args.min_size, progress=progress, jobs=args.jobs, cache=cache,
+            one_file_system=args.one_file_system,
         )
     finally:
         if progress is not None:

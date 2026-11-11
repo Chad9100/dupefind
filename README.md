@@ -36,6 +36,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
                       [--json | --csv] [--limit N] [--sort KEY] [--quiet] [--jobs N] [--cache FILE]
+                      [--one-file-system]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -88,6 +89,13 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   idle; on a single spinning disk more jobs can be slower because the head
   has to seek between files. The groups found are identical for any N.
   `plan` accepts it too.
+- `--one-file-system` does not enter folders that live on a different device
+  than the folder being scanned (mount points, other drives mounted inside
+  the tree), like `find -xdev`. Each PATH is compared with its own device.
+  The report format does not change; files below a skipped mount are simply
+  not seen. The tests simulate a mount by faking the device id, because a
+  real second file system cannot be created portably; it was not tried on a
+  real mount point. `plan` accepts it too.
 - `--cache FILE` keeps a JSON file of file hashes. On the next scan, a file
   whose path, size and modification time are unchanged is not read again, so
   repeat scans of a big tree are much faster. The file is created if missing,

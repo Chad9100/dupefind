@@ -107,6 +107,14 @@ def is_link(st: os.stat_result) -> bool:
     return bool(getattr(st, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
 
 
+def _device(path: str) -> int | None:
+    """Device id of ``path`` (DirEntry.stat leaves it 0 on Windows, so lstat)."""
+    try:
+        return os.lstat(path).st_dev
+    except OSError:
+        return None
+
+
 def _matches(rel: str, name: str, patterns: Sequence[str]) -> bool:
     for pat in patterns:
         if fnmatch.fnmatch(name, pat) or fnmatch.fnmatch(rel, pat):
@@ -121,11 +129,14 @@ def iter_files(
     exclude: Sequence[str] = (),
     min_size: int = 1,
     errors: list[ScanError] | None = None,
+    one_file_system: bool = False,
 ) -> Iterator[FileInfo]:
     """Yield regular files under ``roots`` that pass the filters.
 
     Glob patterns are matched against both the file name and the path relative
     to its root (with ``/`` separators). ``exclude`` also prunes directories.
+    With ``one_file_system``, folders on a different device than their root
+    (mount points) are not entered.
     """
     if errors is None:
         errors = []
@@ -164,6 +175,7 @@ def iter_files(
             errors.append(ScanError(root_abs, "not a regular file or directory"))
             continue
 
+        root_dev = _device(root_abs) if one_file_system else None
         stack = [(root_abs, "")]
         while stack:
             dirpath, relbase = stack.pop()
@@ -187,6 +199,8 @@ def iter_files(
                     continue
                 if stat.S_ISDIR(est.st_mode):
                     if exclude and _matches(rel, entry.name, exclude):
+                        continue
+                    if root_dev is not None and _device(entry.path) != root_dev:
                         continue
                     subdirs.append((entry.path, rel))
                 elif stat.S_ISREG(est.st_mode):
@@ -279,6 +293,7 @@ def find_duplicates(
     progress: ProgressCallback | None = None,
     jobs: int = 1,
     cache: HashCache | None = None,
+    one_file_system: bool = False,
 ) -> ScanResult:
     """Scan ``roots`` and return groups of byte-identical files.
 
@@ -298,7 +313,8 @@ def find_duplicates(
 
     by_size: dict[int, list[FileInfo]] = defaultdict(list)
     for info in iter_files(
-        roots, include=include, exclude=exclude, min_size=min_size, errors=errors
+        roots, include=include, exclude=exclude, min_size=min_size, errors=errors,
+        one_file_system=one_file_system,
     ):
         result.files_scanned += 1
         result.bytes_scanned += info.size

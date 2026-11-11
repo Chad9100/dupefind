@@ -56,7 +56,7 @@ Estimates are rough working hours for one person.
 - [ ] Long path support on Windows (`\\?\` prefix) for very deep trees
 - [ ] Detect when the quarantine folder is on another drive and warn that
       moves become copies
-- [ ] `--one-file-system` to stay on the starting device
+- [x] `--one-file-system` to stay on the starting device
 
 ## v1.0: release (about 2 h)
 
