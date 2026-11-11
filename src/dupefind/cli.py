@@ -20,7 +20,7 @@ def _keep_type(value: str) -> str:
         return keep_spec(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"{exc} (choose from {', '.join(STRATEGIES)})") from None
-from .report import SORT_KEYS, format_size, parse_size, render_report, result_to_dict, sort_groups
+from .report import SORT_KEYS, format_size, parse_size, render_csv, render_report, result_to_dict, sort_groups
 from .purge import KEPT, parse_age, purge_quarantine
 from .restore import RestoreError, restore_quarantine
 from .scanner import find_duplicates
@@ -109,7 +109,10 @@ def build_parser() -> argparse.ArgumentParser:
         "scan", parents=[common], help="report duplicate files (read-only)",
         description="Report groups of identical files. Never modifies anything.",
     )
-    scan.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    fmt = scan.add_mutually_exclusive_group()
+    fmt.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    fmt.add_argument("--csv", action="store_true",
+                     help="print one CSV row per duplicate file (all groups)")
     scan.add_argument(
         "--limit", "--top", type=int, default=20, metavar="N", dest="limit",
         help="show at most N groups in the human report (0 = all; default 20)",
@@ -236,6 +239,8 @@ def _cmd_scan(args) -> int:
     result.groups = sort_groups(result.groups, args.sort)
     if args.json:
         print(json.dumps(result_to_dict(result), indent=2, ensure_ascii=False))
+    elif args.csv:
+        print(render_csv(result), end="")
     else:
         limit = None if args.limit <= 0 else args.limit
         print(render_report(result, limit=limit))

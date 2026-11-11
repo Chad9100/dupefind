@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 
 from . import __version__
@@ -113,3 +115,17 @@ def result_to_dict(result: ScanResult) -> dict:
         ],
         "errors": [{"path": e.path, "error": e.message} for e in result.errors],
     }
+
+
+CSV_COLUMNS = ("group", "size_bytes", "sha256", "copies", "wasted_bytes", "mtime", "path")
+
+
+def render_csv(result: ScanResult) -> str:
+    """One row per duplicate file, groups in their current order (header included)."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for i, g in enumerate(result.groups, 1):
+        for f in g.files:
+            writer.writerow([i, g.size, g.sha256, len(g.files), g.wasted, f.mtime, f.path])
+    return buf.getvalue()

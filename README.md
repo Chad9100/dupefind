@@ -35,7 +35,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
-                      [--json] [--limit N] [--sort KEY] [--quiet] [--jobs N] [--cache FILE]
+                      [--json | --csv] [--limit N] [--sort KEY] [--quiet] [--jobs N] [--cache FILE]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -45,6 +45,22 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   `--include "*.jpg"`, `--exclude .git` and `--exclude "build/*"` all work.
   `--exclude` also prunes whole folders.
 - `--json` prints machine-readable output (all groups, sizes, mtimes, errors).
+- `--csv` prints one row per duplicate file for spreadsheets (all groups, no
+  `--limit`; mutually exclusive with `--json`). Columns: `group`, `size_bytes`,
+  `sha256`, `copies`, `wasted_bytes` (of the group), `mtime` (Unix seconds),
+  `path`. Fields with commas are quoted. `--sort` applies. Captured on a temp
+  tree (folder prefix shortened to `C:\work`):
+
+  ```text
+  $ dupefind scan photos backup --csv
+  group,size_bytes,sha256,copies,wasted_bytes,mtime,path
+  1,3000,2871b775898deb114cf6c642910e5fdf6cfc30c3138d7947eb867c2d4dcab68e,2,3000,1794417342.1861854,C:\work\photoseach.jpg
+  1,3000,2871b775898deb114cf6c642910e5fdf6cfc30c3138d7947eb867c2d4dcab68e,2,3000,1794417342.230131,C:\workackupeach.jpg
+  2,12,f7626dcb23bbdf3a84360bbd2d5b9afb43d9a1e09c29aa53c386ac6d89b1e45e,2,12,1794417342.2635448,"C:\work\photos
+, copy.txt"
+  2,12,f7626dcb23bbdf3a84360bbd2d5b9afb43d9a1e09c29aa53c386ac6d89b1e45e,2,12,1794417342.244246,C:\work\photos
+.txt
+  ```
 - `--limit N` (alias `--top N`) caps how many groups the human report lists
   (default 20, 0 = all).
 - `--sort wasted|size|count|path` orders the groups (human report and `--json`).
