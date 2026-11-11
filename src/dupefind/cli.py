@@ -9,7 +9,7 @@ import sys
 from typing import Sequence
 
 from . import __version__
-from .apply import MOVED, SKIPPED, WOULD_MOVE, apply_plan
+from .apply import LINKED, MOVED, SKIPPED, WOULD_LINK, WOULD_MOVE, apply_plan
 from .cache import HashCache
 from .progress import ProgressLine, stream_is_tty
 from .plan import STRATEGIES, PlanError, build_plan, keep_spec, load_plan, load_scan, write_plan
@@ -177,6 +177,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"where to move extra copies (default: {DEFAULT_QUARANTINE}/ next to the plan)",
     )
     apply.add_argument("--delete", action="store_true", help="delete extra copies instead of moving")
+    apply.add_argument(
+        "--hardlink", action="store_true",
+        help="replace extra copies with hard links to the kept copy (same volume only)",
+    )
+    apply.add_argument(
+        "--symlink", action="store_true",
+        help="replace extra copies with symbolic links to the kept copy",
+    )
     apply.add_argument("--dry-run", action="store_true", help="verify and show what would happen")
 
     restore = sub.add_parser(
@@ -310,21 +318,29 @@ def _cmd_apply(args) -> int:
     except PlanError as exc:
         print(f"dupefind: error: {exc}", file=sys.stderr)
         return 2
+    link = "hardlink" if args.hardlink else "symlink" if args.symlink else None
+    if args.hardlink and args.symlink:
+        print("dupefind: error: --hardlink and --symlink cannot be combined", file=sys.stderr)
+        return 2
+    if link and (args.delete or args.quarantine):
+        print("dupefind: error: --hardlink/--symlink cannot be combined with "
+              "--delete or --quarantine", file=sys.stderr)
+        return 2
     qdir = args.quarantine
-    if not args.delete and not qdir:
+    if not args.delete and not link and not qdir:
         qdir = os.path.join(os.path.dirname(os.path.abspath(args.plan)), DEFAULT_QUARANTINE)
-    report = apply_plan(plan, delete=args.delete, quarantine_dir=qdir, dry_run=args.dry_run)
+    report = apply_plan(plan, delete=args.delete, quarantine_dir=qdir, dry_run=args.dry_run, link=link)
 
     width = max((len(a.status) for a in report.actions), default=0)
     for a in report.actions:
         line = f"{a.status:<{width}}  {a.path}"
-        if a.status in (MOVED, WOULD_MOVE) and a.dest:
+        if a.status in (MOVED, WOULD_MOVE, LINKED, WOULD_LINK) and a.dest:
             line += f" -> {a.dest}"
         elif a.status == SKIPPED:
             line += f": {a.detail}"
         print(line)
 
-    verb = "deleted" if args.delete else "moved"
+    verb = "deleted" if args.delete else "linked" if link else "moved"
     if args.dry_run:
         summary = (
             f"Dry run: would have {verb} {_files(len(report.done))} "
@@ -334,7 +350,7 @@ def _cmd_apply(args) -> int:
         summary = f"{verb.capitalize()} {_files(len(report.done))} ({format_size(report.reclaimed)})"
     if report.skipped:
         summary += f", skipped {len(report.skipped):,}"
-    if not args.delete and report.done and not args.dry_run:
+    if not args.delete and not link and report.done and not args.dry_run:
         summary += f"\nQuarantine: {report.quarantine_dir}"
     if not report.actions:
         summary = "Plan has nothing to do."

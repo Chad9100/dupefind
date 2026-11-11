@@ -54,12 +54,10 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   ```text
   $ dupefind scan photos backup --csv
   group,size_bytes,sha256,copies,wasted_bytes,mtime,path
-  1,3000,2871b775898deb114cf6c642910e5fdf6cfc30c3138d7947eb867c2d4dcab68e,2,3000,1794417342.1861854,C:\work\photoseach.jpg
-  1,3000,2871b775898deb114cf6c642910e5fdf6cfc30c3138d7947eb867c2d4dcab68e,2,3000,1794417342.230131,C:\workackupeach.jpg
-  2,12,f7626dcb23bbdf3a84360bbd2d5b9afb43d9a1e09c29aa53c386ac6d89b1e45e,2,12,1794417342.2635448,"C:\work\photos
-, copy.txt"
-  2,12,f7626dcb23bbdf3a84360bbd2d5b9afb43d9a1e09c29aa53c386ac6d89b1e45e,2,12,1794417342.244246,C:\work\photos
-.txt
+  1,3000,e1630f843370f402870799e14abbf2b06af2d23b0153658e1211dffabc61ad8f,2,3000,1794430365.8724089,C:\work\photos\each.jpg
+  1,3000,e1630f843370f402870799e14abbf2b06af2d23b0153658e1211dffabc61ad8f,2,3000,1794430365.9493525,C:\work\backup\each.jpg
+  2,12,a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447,2,12,1794430365.9508574,"C:\work\photos\notes, copy.txt"
+  2,12,a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447,2,12,1794430365.9508574,C:\work\photos\notes.txt
   ```
 - `--by-folder` replaces the group list with a summary of which folders hold
   the most duplicate data: for each folder, the number of files in it that
@@ -159,7 +157,7 @@ the group.
 ### Apply
 
 ```sh
-dupefind apply PLAN [--dry-run] [--quarantine DIR | --delete]
+dupefind apply PLAN [--dry-run] [--quarantine DIR | --delete | --hardlink | --symlink]
 ```
 
 By default the extra copies are moved into `dupefind-quarantine/` next to the
@@ -168,6 +166,32 @@ every move is recorded in `dupefind-quarantine/manifest.jsonl` (original path,
 new path, size, SHA-256, which copy was kept). `--quarantine DIR` picks another
 folder. `--delete` removes the extras instead. `--dry-run` does all the checks
 and prints what would happen without changing anything.
+
+`--hardlink` replaces each extra copy with a hard link to the kept copy, so
+every path still opens but the data is stored once. It only works on the same
+volume (checked first; other files are skipped) and on file systems that
+support hard links; if creating the link fails, the original file is left
+untouched and reported. `--symlink` does the same with symbolic links (on
+Windows this needs Developer Mode or an elevated prompt). Neither can be
+combined with `--delete` or `--quarantine`, and nothing is quarantined, so
+there is nothing to `restore`. The link is made under a temporary name and
+renamed over the extra, so the path is never missing. Captured on throwaway
+files in a temp folder (prefix shortened to `C:\work`):
+
+```text
+$ dupefind apply plan.json --hardlink --dry-run
+would link  C:\work\backup\each.jpg -> C:\work\photos\each.jpg
+would link  C:\work\photos\notes.txt -> C:\work\photos\notes, copy.txt
+Dry run: would have linked 2 files (2.9 KiB)
+$ dupefind apply plan.json --hardlink
+linked  C:\work\backup\each.jpg -> C:\work\photos\each.jpg
+linked  C:\work\photos\notes.txt -> C:\work\photos\notes, copy.txt
+Linked 2 files (2.9 KiB)
+$ dupefind apply plan.json --hardlink
+skipped  C:\work\backup\each.jpg: is the same physical file as the kept copy
+skipped  C:\work\photos\notes.txt: is the same physical file as the kept copy
+Linked 0 files (0 B), skipped 2
+```
 
 Exit status: `0` when everything in the plan was done, `1` when some files
 were skipped (the rest still ran), `2` for a bad plan file or usage error.
@@ -318,6 +342,7 @@ free nothing).
   after checking they are unchanged.
 - **Quarantine by default.** `apply` moves files unless you pass `--delete`,
   and writes a manifest so every move can be undone with `dupefind restore`.
+  `--hardlink` / `--symlink` are opt-in and cannot be undone by `restore`.
 - **Re-verified before acting.** For each group the kept copy must still exist
   with the planned SHA-256, otherwise the whole group is skipped. Each extra
   copy must still be a regular file of the planned size and hash.

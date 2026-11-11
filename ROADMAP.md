@@ -40,10 +40,10 @@ Estimates are rough working hours for one person.
 
 ## v0.5: link instead of delete (about 3 h)
 
-- [ ] `apply --hardlink` replaces extras with hard links to the kept copy
+- [x] `apply --hardlink` replaces extras with hard links to the kept copy
       (same volume only, checked first)
-- [ ] `apply --symlink` as an opt-in alternative where hard links are impossible
-- [ ] Clear errors on file systems that do not support links
+- [x] `apply --symlink` as an opt-in alternative where hard links are impossible
+- [x] Clear errors on file systems that do not support links
 
 ## v0.6: reporting (about 3 h)
 

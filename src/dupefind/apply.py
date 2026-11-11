@@ -25,6 +25,8 @@ MOVED = "moved"
 DELETED = "deleted"
 WOULD_MOVE = "would move"
 WOULD_DELETE = "would delete"
+LINKED = "linked"
+WOULD_LINK = "would link"
 SKIPPED = "skipped"
 
 
@@ -150,18 +152,55 @@ def _check_hash(path: str, digest: str) -> str:
     return ""
 
 
+def _replace_with_link(keep: str, path: str, kind: str) -> str:
+    """Replace ``path`` by a link to ``keep``; return an error text or ''.
+
+    The link is created under a temporary name next to ``path`` and then
+    renamed over it, so ``path`` is never missing and a failure leaves the
+    original file untouched.
+    """
+    tmp = f"{path}.dupefind-link-{os.getpid()}"
+    try:
+        if kind == "hardlink":
+            os.link(keep, tmp)
+        else:
+            os.symlink(keep, tmp)
+    except NotImplementedError:
+        return f"this system cannot create {kind}s"
+    except OSError as exc:
+        return f"cannot create {kind} (file system or permissions may not support it): {exc.strerror or exc}"
+    try:
+        os.replace(tmp, path)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return f"{kind} replace failed: {exc.strerror or exc}"
+    return ""
+
+
 def apply_plan(
     plan: dict,
     *,
     delete: bool = False,
     quarantine_dir: str | None = None,
     dry_run: bool = False,
+    link: str | None = None,
 ) -> ApplyReport:
-    """Apply a validated plan (see :func:`dupefind.plan.load_plan`)."""
-    if not delete and not quarantine_dir:
-        raise ValueError("quarantine_dir is required unless delete=True")
-    qdir = None if delete else os.path.abspath(quarantine_dir)  # type: ignore[arg-type]
-    report = ApplyReport("delete" if delete else "quarantine", dry_run, qdir)
+    """Apply a validated plan (see :func:`dupefind.plan.load_plan`).
+
+    ``link`` is ``"hardlink"`` or ``"symlink"`` to replace each extra copy with
+    a link to the kept copy instead of quarantining or deleting it.
+    """
+    if link not in (None, "hardlink", "symlink"):
+        raise ValueError(f"unknown link mode: {link!r}")
+    if link and delete:
+        raise ValueError("link and delete cannot be combined")
+    if not delete and not link and not quarantine_dir:
+        raise ValueError("quarantine_dir is required unless delete=True or link is set")
+    qdir = None if (delete or link) else os.path.abspath(quarantine_dir)  # type: ignore[arg-type]
+    report = ApplyReport(link or ("delete" if delete else "quarantine"), dry_run, qdir)
 
     roots = [r for r in plan.get("roots", []) if isinstance(r, str) and os.path.isabs(r)]
     keeps = {_norm(g["keep"]) for g in plan["groups"]}
@@ -212,7 +251,19 @@ def apply_plan(
                 skip(path, why)
                 continue
 
-            if delete:
+            if link:
+                if link == "hardlink" and st.st_dev != keep_st.st_dev:
+                    skip(path, "is on a different volume than the kept copy; cannot hard link")
+                    continue
+                if dry_run:
+                    report.actions.append(Action(path, WOULD_LINK, size, dest=keep))
+                    continue
+                err = _replace_with_link(keep, path, link)
+                if err:
+                    skip(path, err)
+                    continue
+                report.actions.append(Action(path, LINKED, size, dest=keep))
+            elif delete:
                 if dry_run:
                     report.actions.append(Action(path, WOULD_DELETE, size))
                     continue
