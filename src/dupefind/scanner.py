@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable, Iterator, Sequence
 
 from .cache import HashCache
+from .longpath import io_path
 
 CHUNK_SIZE = 64 * 1024
 READ_BLOCK = 1024 * 1024
@@ -82,7 +83,7 @@ def hash_file(path: str, limit: int | None = None) -> str:
     """SHA-256 hex digest of a file, or of its first ``limit`` bytes."""
     h = hashlib.sha256()
     remaining = limit
-    with open(path, "rb") as fh:
+    with open(io_path(path), "rb") as fh:
         while True:
             want = READ_BLOCK if remaining is None else min(READ_BLOCK, remaining)
             if want <= 0:
@@ -110,7 +111,7 @@ def is_link(st: os.stat_result) -> bool:
 def _device(path: str) -> int | None:
     """Device id of ``path`` (DirEntry.stat leaves it 0 on Windows, so lstat)."""
     try:
-        return os.lstat(path).st_dev
+        return os.lstat(io_path(path)).st_dev
     except OSError:
         return None
 
@@ -158,7 +159,7 @@ def iter_files(
     for idx, root in enumerate(roots):
         root_abs = os.path.abspath(root)
         try:
-            st = os.lstat(root_abs)
+            st = os.lstat(io_path(root_abs))
         except OSError as exc:
             errors.append(ScanError(root_abs, _error_text(exc)))
             continue
@@ -179,10 +180,10 @@ def iter_files(
         stack = [(root_abs, "")]
         while stack:
             dirpath, relbase = stack.pop()
-            if os.path.exists(os.path.join(dirpath, QUARANTINE_MARKER)):
+            if os.path.exists(io_path(os.path.join(dirpath, QUARANTINE_MARKER))):
                 continue
             try:
-                with os.scandir(dirpath) as it:
+                with os.scandir(io_path(dirpath)) as it:
                     entries = sorted(it, key=lambda e: e.name)
             except OSError as exc:
                 errors.append(ScanError(dirpath, _error_text(exc)))
@@ -190,21 +191,23 @@ def iter_files(
             subdirs = []
             for entry in entries:
                 rel = f"{relbase}/{entry.name}" if relbase else entry.name
+                # Not entry.path: that would carry the extended-length prefix.
+                epath = os.path.join(dirpath, entry.name)
                 try:
                     est = entry.stat(follow_symlinks=False)
                 except OSError as exc:
-                    errors.append(ScanError(entry.path, _error_text(exc)))
+                    errors.append(ScanError(epath, _error_text(exc)))
                     continue
                 if is_link(est):
                     continue
                 if stat.S_ISDIR(est.st_mode):
                     if exclude and _matches(rel, entry.name, exclude):
                         continue
-                    if root_dev is not None and _device(entry.path) != root_dev:
+                    if root_dev is not None and _device(epath) != root_dev:
                         continue
-                    subdirs.append((entry.path, rel))
+                    subdirs.append((epath, rel))
                 elif stat.S_ISREG(est.st_mode):
-                    info = accept(entry.path, rel, entry.name, est, idx)
+                    info = accept(epath, rel, entry.name, est, idx)
                     if info:
                         yield info
             stack.extend(reversed(subdirs))
@@ -217,7 +220,7 @@ def _drop_hardlinks(files: list[FileInfo], errors: list[ScanError]) -> tuple[lis
     dropped = 0
     for f in files:
         try:
-            st = os.stat(f.path)
+            st = os.stat(io_path(f.path))
         except OSError as exc:
             errors.append(ScanError(f.path, _error_text(exc)))
             continue

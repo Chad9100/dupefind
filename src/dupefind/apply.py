@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Sequence
 
+from .longpath import io_path
 from .scanner import QUARANTINE_MARKER, hash_file, is_link
 
 MANIFEST_NAME = "manifest.jsonl"
@@ -121,17 +122,17 @@ def device_of(path: str) -> int | None:
 
 
 def _unique(dest: str) -> str:
-    if not os.path.lexists(dest):
+    if not os.path.lexists(io_path(dest)):
         return dest
     n = 1
-    while os.path.lexists(f"{dest}~{n}"):
+    while os.path.lexists(io_path(f"{dest}~{n}")):
         n += 1
     return f"{dest}~{n}"
 
 
 def _prepare_quarantine(qdir: str) -> None:
-    os.makedirs(qdir, exist_ok=True)
-    marker = os.path.join(qdir, QUARANTINE_MARKER)
+    os.makedirs(io_path(qdir), exist_ok=True)
+    marker = io_path(os.path.join(qdir, QUARANTINE_MARKER))
     if not os.path.exists(marker):
         with open(marker, "w", encoding="utf-8") as fh:
             fh.write("Files moved here by dupefind apply. See manifest.jsonl.\n")
@@ -139,13 +140,13 @@ def _prepare_quarantine(qdir: str) -> None:
 
 def _append_manifest(qdir: str, record: dict) -> None:
     # Written after every move so the record survives an interrupted run.
-    with open(os.path.join(qdir, MANIFEST_NAME), "a", encoding="utf-8") as fh:
+    with open(io_path(os.path.join(qdir, MANIFEST_NAME)), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def _check_regular(path: str, size: int) -> tuple[os.stat_result | None, str]:
     try:
-        st = os.lstat(path)
+        st = os.lstat(io_path(path))
     except FileNotFoundError:
         return None, "no longer exists"
     except OSError as exc:
@@ -179,18 +180,18 @@ def _replace_with_link(keep: str, path: str, kind: str) -> str:
     tmp = f"{path}.dupefind-link-{os.getpid()}"
     try:
         if kind == "hardlink":
-            os.link(keep, tmp)
+            os.link(io_path(keep), io_path(tmp))
         else:
-            os.symlink(keep, tmp)
+            os.symlink(keep, io_path(tmp))
     except NotImplementedError:
         return f"this system cannot create {kind}s"
     except OSError as exc:
         return f"cannot create {kind} (file system or permissions may not support it): {exc.strerror or exc}"
     try:
-        os.replace(tmp, path)
+        os.replace(io_path(tmp), io_path(path))
     except OSError as exc:
         try:
-            os.remove(tmp)
+            os.remove(io_path(tmp))
         except OSError:
             pass
         return f"{kind} replace failed: {exc.strerror or exc}"
@@ -286,7 +287,7 @@ def apply_plan(
                     report.actions.append(Action(path, WOULD_DELETE, size))
                     continue
                 try:
-                    os.remove(path)
+                    os.remove(io_path(path))
                 except OSError as exc:
                     skip(path, f"delete failed: {exc.strerror or exc}")
                     continue
@@ -301,8 +302,8 @@ def apply_plan(
                     continue
                 try:
                     _prepare_quarantine(qdir)  # type: ignore[arg-type]
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    shutil.move(path, dest)
+                    os.makedirs(io_path(os.path.dirname(dest)), exist_ok=True)
+                    shutil.move(io_path(path), io_path(dest))
                 except OSError as exc:
                     skip(path, f"move failed: {exc.strerror or exc}")
                     continue

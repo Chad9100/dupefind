@@ -384,6 +384,22 @@ free nothing).
   `.dupefind-quarantine` marker file, and scans skip any folder that has one.
 - Plan paths must be absolute; relative paths in a hand-edited plan are
   skipped.
+- **Long paths on Windows.** Paths of about 240 characters or more are passed
+  to Windows in extended-length form (`\\?\` prefix), so scans, hashing and
+  `apply` work past the 260-character limit. Reports, JSON and manifests keep
+  the plain path. Short paths are never changed. Real output from a scan of
+  two identical files whose path was 379 characters long (a temporary folder,
+  path shortened here with `...`):
+
+  ```
+  Scanned 2 files (2.7 KiB) in 1 root
+  Found 1 duplicate group: 2 files, 1 redundant copy
+  Wasted space: 1.4 KiB
+
+  [1] 1.4 KiB x 2 (wasted 1.4 KiB)  sha256 f56627731601
+      ...\level6xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\a.bin
+      ...\level6xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\b.bin
+  ```
 
 Still, run `--dry-run` first and keep backups of anything you care about.
 
