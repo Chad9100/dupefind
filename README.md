@@ -401,6 +401,19 @@ free nothing).
       ...\level6xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\b.bin
   ```
 
+  `restore`, `purge` and the `--cache` file use the same prefix. Real output
+  of `apply`, `purge --dry-run` and `restore` on a throwaway tree of the same
+  depth (temp folder shortened to `TMP`, each long folder name to `...`):
+
+  ```
+  moved  TMP\t\...\...\...\...\...\...\...\b.bin -> TMP\q\t\...\...\...\...\...\...\...\b.bin
+  Moved 1 file (1.2 KiB)
+  Quarantine: TMP\q
+  Dry run: would have purged 0 files (0 B), kept 1 newer
+  restored  TMP\t\...\...\...\...\...\...\...\b.bin
+  Restored 1 file (1.2 KiB)
+  ```
+
 Still, run `--dry-run` first and keep backups of anything you care about.
 
 ## Development

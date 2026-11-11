@@ -54,7 +54,7 @@ Estimates are rough working hours for one person.
 ## v0.7: robustness (about 2 h)
 
 - [x] Long path support on Windows (`\\?\` prefix) for very deep trees
-      (scan, hash and `apply`; `restore` and `purge` not yet)
+      (scan, hash, `apply`, `restore`, `purge` and the `--cache` file)
 - [x] Detect when the quarantine folder is on another drive and warn that
       moves become copies
 - [x] `--one-file-system` to stay on the starting device

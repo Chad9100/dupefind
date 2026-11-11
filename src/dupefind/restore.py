@@ -19,6 +19,7 @@ import shutil
 from dataclasses import dataclass, field
 
 from .apply import MANIFEST_NAME, SKIPPED, Action, _check_hash, _check_regular, _norm
+from .longpath import io_path
 
 RESTORED = "restored"
 WOULD_RESTORE = "would restore"
@@ -54,7 +55,7 @@ def _inside(path: str, folder: str) -> bool:
 def _read_manifest(manifest: str) -> list[tuple[str, dict | None]]:
     """Return ``(raw line, record or None)`` for every non-blank line."""
     try:
-        with open(manifest, encoding="utf-8-sig") as fh:
+        with open(io_path(manifest), encoding="utf-8-sig") as fh:
             lines = fh.read().splitlines()
     except FileNotFoundError:
         raise RestoreError(f"no {MANIFEST_NAME} in {os.path.dirname(manifest)}") from None
@@ -86,16 +87,16 @@ def _valid(record: dict | None) -> str:
 
 def _rewrite_manifest(manifest: str, lines: list[str]) -> None:
     tmp = manifest + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
+    with open(io_path(tmp), "w", encoding="utf-8") as fh:
         fh.writelines(line + "\n" for line in lines)
-    os.replace(tmp, manifest)
+    os.replace(io_path(tmp), io_path(manifest))
 
 
 def _prune_empty_dirs(qdir: str, start: str) -> None:
     folder = os.path.dirname(start)
     while _inside(folder, qdir):
         try:
-            os.rmdir(folder)  # only succeeds when empty
+            os.rmdir(io_path(folder))  # only succeeds when empty
         except OSError:
             return
         folder = os.path.dirname(folder)
@@ -135,7 +136,7 @@ def restore_quarantine(quarantine_dir: str, *, dry_run: bool = False) -> Restore
         if _inside(original, qdir):
             skip("original path is inside the quarantine folder")
             continue
-        if not os.path.lexists(src):
+        if not os.path.lexists(io_path(src)):
             skip(f"{src} is no longer in the quarantine")
             continue
         st, why = _check_regular(src, size)
@@ -145,7 +146,7 @@ def restore_quarantine(quarantine_dir: str, *, dry_run: bool = False) -> Restore
             skip(f"quarantined copy {why}")
             continue
         key = _norm(original)
-        if os.path.lexists(original) or key in claimed:
+        if os.path.lexists(io_path(original)) or key in claimed:
             skip("a file now exists at the original path; not overwriting")
             continue
         claimed.add(key)
@@ -154,10 +155,10 @@ def restore_quarantine(quarantine_dir: str, *, dry_run: bool = False) -> Restore
             report.actions.append(Action(original, WOULD_RESTORE, size, dest=src))
             continue
         try:
-            os.makedirs(os.path.dirname(original), exist_ok=True)
-            if os.path.lexists(original):  # appeared since the check above
+            os.makedirs(io_path(os.path.dirname(original)), exist_ok=True)
+            if os.path.lexists(io_path(original)):  # appeared since the check above
                 raise FileExistsError(0, "a file now exists at the original path")
-            shutil.move(src, original)
+            shutil.move(io_path(src), io_path(original))
         except OSError as exc:
             skip(f"restore failed: {exc.strerror or exc}")
             continue

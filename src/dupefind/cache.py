@@ -11,6 +11,8 @@ import json
 import os
 import tempfile
 
+from .longpath import io_path
+
 VERSION = 1
 
 
@@ -32,7 +34,7 @@ class HashCache:
 
     def _load(self) -> None:
         try:
-            with open(self.path, encoding="utf-8") as fh:
+            with open(io_path(self.path), encoding="utf-8") as fh:
                 data = json.load(fh)
         except FileNotFoundError:
             return
@@ -66,12 +68,12 @@ class HashCache:
         if not self.dirty:
             return
         folder = os.path.dirname(self.path)
-        os.makedirs(folder, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=folder, prefix=".dupefind-cache-", suffix=".tmp")
+        os.makedirs(io_path(folder), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=io_path(folder), prefix=".dupefind-cache-", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump({"version": VERSION, "entries": self._entries}, fh)
-            os.replace(tmp, self.path)
+            os.replace(tmp, io_path(self.path))
         except BaseException:
             try:
                 os.unlink(tmp)

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .apply import MANIFEST_NAME, SKIPPED, Action, _check_hash, _check_regular
+from .longpath import io_path
 from .restore import RestoreError, _inside, _prune_empty_dirs, _read_manifest, _rewrite_manifest, _valid
 
 PURGED = "purged"
@@ -114,7 +115,7 @@ def purge_quarantine(
         if not os.path.isabs(src) or not _inside(src, qdir):
             skip(f"quarantined path {src} is outside the quarantine folder")
             continue
-        if not os.path.lexists(src):
+        if not os.path.lexists(io_path(src)):
             skip(f"{src} is no longer in the quarantine")
             continue
         st, why = _check_regular(src, record["size"])
@@ -128,7 +129,7 @@ def purge_quarantine(
             report.actions.append(Action(original, WOULD_PURGE, record["size"], dest=src))
             continue
         try:
-            os.remove(src)
+            os.remove(io_path(src))
         except OSError as exc:
             skip(f"delete failed: {exc.strerror or exc}")
             continue
