@@ -337,6 +337,15 @@ def _cmd_apply(args) -> int:
         qdir = os.path.join(os.path.dirname(os.path.abspath(args.plan)), DEFAULT_QUARANTINE)
     report = apply_plan(plan, delete=args.delete, quarantine_dir=qdir, dry_run=args.dry_run, link=link)
 
+    if report.cross_device:
+        print(
+            f"dupefind: warning: {_files(report.cross_device)} "
+            f"({format_size(report.cross_device_bytes)}) to move "
+            f"sit on a different drive than the quarantine folder, so the move "
+            f"is a slow copy and delete, and the quarantine drive needs that much "
+            f"free space. Use --quarantine on the same drive to avoid this.",
+            file=sys.stderr,
+        )
     width = max((len(a.status) for a in report.actions), default=0)
     for a in report.actions:
         line = f"{a.status:<{width}}  {a.path}"

@@ -175,6 +175,22 @@ new path, size, SHA-256, which copy was kept). `--quarantine DIR` picks another
 folder. `--delete` removes the extras instead. `--dry-run` does all the checks
 and prints what would happen without changing anything.
 
+If some of the files to move are on a different drive (device) than the
+quarantine folder, a move is really a copy followed by a delete: slower, and
+the quarantine drive needs room for the data. `apply` prints a warning on
+stderr before it starts (also for `--dry-run`) and carries on. The check
+compares device ids and does not apply to `--delete` or links. Real output
+from throwaway files; a single temp folder sits on one drive, so the device
+check was forced to report a different one for this capture (prefix shortened
+to `C:\work`):
+
+```text
+$ dupefind apply dupefind-plan.json --dry-run
+dupefind: warning: 1 file (2.9 KiB) to move sit on a different drive than the quarantine folder, so the move is a slow copy and delete, and the quarantine drive needs that much free space. Use --quarantine on the same drive to avoid this.
+would move  C:\work\backup\a.jpg -> C:\work\dupefind-quarantine\backup\a.jpg
+Dry run: would have moved 1 file (2.9 KiB)
+```
+
 `--hardlink` replaces each extra copy with a hard link to the kept copy, so
 every path still opens but the data is stored once. It only works on the same
 volume (checked first; other files are skipped) and on file systems that

@@ -45,6 +45,10 @@ class ApplyReport:
     dry_run: bool
     quarantine_dir: str | None
     actions: list[Action] = field(default_factory=list)
+    #: files that sit on a different device than the quarantine folder, so
+    #: moving them means copy + delete instead of a cheap rename
+    cross_device: int = 0
+    cross_device_bytes: int = 0
 
     @property
     def done(self) -> list[Action]:
@@ -101,6 +105,19 @@ def quarantine_dest(quarantine_dir: str, path: str, roots: Sequence[str] = ()) -
             continue
         return os.path.join(quarantine_dir, _root_label(root), rel)
     return _mirror(quarantine_dir, path)
+
+
+def device_of(path: str) -> int | None:
+    """Device id of ``path`` or of its nearest existing parent folder."""
+    path = os.path.abspath(path)
+    while True:
+        try:
+            return os.stat(path).st_dev
+        except OSError:
+            parent = os.path.dirname(path)
+            if parent == path:
+                return None
+            path = parent
 
 
 def _unique(dest: str) -> str:
@@ -205,6 +222,7 @@ def apply_plan(
     roots = [r for r in plan.get("roots", []) if isinstance(r, str) and os.path.isabs(r)]
     keeps = {_norm(g["keep"]) for g in plan["groups"]}
     handled: set[str] = set()
+    qdev = device_of(qdir) if qdir else None
 
     for group in plan["groups"]:
         size, digest, keep = group["size"], group["sha256"], group["keep"]
@@ -275,6 +293,9 @@ def apply_plan(
                 report.actions.append(Action(path, DELETED, size))
             else:
                 dest = _unique(quarantine_dest(qdir, path, roots))  # type: ignore[arg-type]
+                if qdev is not None and st.st_dev != qdev:
+                    report.cross_device += 1
+                    report.cross_device_bytes += size
                 if dry_run:
                     report.actions.append(Action(path, WOULD_MOVE, size, dest=dest))
                     continue
