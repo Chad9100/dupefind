@@ -49,7 +49,7 @@ Estimates are rough working hours for one person.
 
 - [x] `--sort wasted|size|count|path` and `--top N` for the human report
 - [x] CSV output (`--csv`) for spreadsheets
-- [ ] Per-folder summary: which folders hold the most duplicate data
+- [x] Per-folder summary (`scan --by-folder`): which folders hold the most duplicate data
 
 ## v0.7: robustness (about 2 h)
 

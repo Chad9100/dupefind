@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 
 from . import __version__
@@ -129,3 +130,35 @@ def render_csv(result: ScanResult) -> str:
         for f in g.files:
             writer.writerow([i, g.size, g.sha256, len(g.files), g.wasted, f.mtime, f.path])
     return buf.getvalue()
+
+
+def folder_summary(result: ScanResult) -> list[tuple[str, int, int]]:
+    """Return ``(folder, duplicate_files, duplicate_bytes)``, biggest first.
+
+    Every file that belongs to a duplicate group counts toward the folder that
+    directly contains it, with its full size.
+    """
+    totals: dict[str, list[int]] = {}
+    for g in result.groups:
+        for f in g.files:
+            folder = os.path.dirname(f.path) or "."
+            entry = totals.setdefault(folder, [0, 0])
+            entry[0] += 1
+            entry[1] += g.size
+    rows = [(folder, n, size) for folder, (n, size) in totals.items()]
+    return sorted(rows, key=lambda r: (-r[2], -r[1], r[0]))
+
+
+def render_folder_summary(result: ScanResult, *, limit: int | None = None) -> str:
+    rows = folder_summary(result)
+    if not rows:
+        return "No duplicates found."
+    shown = rows if limit is None else rows[:limit]
+    lines = ["Folders holding duplicate data (every copy counted):", ""]
+    for folder, n, size in shown:
+        lines.append(f"{format_size(size):>10}  {_plural(n, 'file'):>9}  {folder}")
+    hidden = len(rows) - len(shown)
+    if hidden > 0:
+        lines.append("")
+        lines.append(f"... and {_plural(hidden, 'more folder')} (use --limit 0 to show all)")
+    return "\n".join(lines)

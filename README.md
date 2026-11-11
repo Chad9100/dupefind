@@ -61,6 +61,20 @@ dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
   2,12,f7626dcb23bbdf3a84360bbd2d5b9afb43d9a1e09c29aa53c386ac6d89b1e45e,2,12,1794417342.244246,C:\work\photos
 .txt
   ```
+- `--by-folder` replaces the group list with a summary of which folders hold
+  the most duplicate data: for each folder, the number of files in it that
+  have an identical twin somewhere and their total size (every copy counts,
+  including the one you would keep). Biggest first; `--top N` limits the rows.
+  Human report only. Captured on a temp tree (prefix shortened to `C:\work`):
+
+  ```text
+  $ dupefind scan photos backup docs --by-folder
+  Folders holding duplicate data (every copy counted):
+
+     5.9 KiB    2 files  C:\work\backup
+     2.9 KiB    2 files  C:\work\photos
+        16 B     1 file  C:\work\docs
+  ```
 - `--limit N` (alias `--top N`) caps how many groups the human report lists
   (default 20, 0 = all).
 - `--sort wasted|size|count|path` orders the groups (human report and `--json`).
