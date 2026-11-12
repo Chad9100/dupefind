@@ -131,6 +131,7 @@ def iter_files(
     min_size: int = 1,
     errors: list[ScanError] | None = None,
     one_file_system: bool = False,
+    max_size: int | None = None,
 ) -> Iterator[FileInfo]:
     """Yield regular files under ``roots`` that pass the filters.
 
@@ -145,6 +146,8 @@ def iter_files(
 
     def accept(path: str, rel: str, name: str, st: os.stat_result, idx: int):
         if st.st_size < min_size:
+            return None
+        if max_size is not None and st.st_size > max_size:
             return None
         if include and not _matches(rel, name, include):
             return None
@@ -297,6 +300,7 @@ def find_duplicates(
     jobs: int = 1,
     cache: HashCache | None = None,
     one_file_system: bool = False,
+    max_size: int | None = None,
 ) -> ScanResult:
     """Scan ``roots`` and return groups of byte-identical files.
 
@@ -311,13 +315,15 @@ def find_duplicates(
     """
     if jobs < 1:
         raise ValueError("jobs must be at least 1")
+    if max_size is not None and max_size < min_size:
+        raise ValueError("max_size must not be smaller than min_size")
     result = ScanResult(roots=[os.path.abspath(r) for r in roots])
     errors = result.errors
 
     by_size: dict[int, list[FileInfo]] = defaultdict(list)
     for info in iter_files(
         roots, include=include, exclude=exclude, min_size=min_size, errors=errors,
-        one_file_system=one_file_system,
+        one_file_system=one_file_system, max_size=max_size,
     ):
         result.files_scanned += 1
         result.bytes_scanned += info.size

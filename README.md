@@ -34,13 +34,29 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 ### Scan
 
 ```sh
-dupefind scan PATH... [--min-size SIZE] [--include GLOB] [--exclude GLOB]
+dupefind scan PATH... [--min-size SIZE] [--max-size SIZE] [--include GLOB] [--exclude GLOB]
                       [--json | --csv] [--limit N] [--sort KEY] [--quiet] [--jobs N] [--cache FILE]
                       [--one-file-system]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
   The default is 1 byte, so empty files are skipped; `--min-size 0` includes them.
+- `--max-size` ignores large files (same size syntax, inclusive), so you can
+  skip huge videos or disk images; an inverted range (`--max-size` below
+  `--min-size`) is an error. Also works with `plan`. Captured on a temp tree
+  with a 2.9 MiB video and a 2 KiB note, each present in two folders (prefix
+  shortened to `C:\work`):
+
+  ```text
+  $ dupefind scan media backup --max-size 1M
+  Scanned 2 files (3.9 KiB) in 2 roots
+  Found 1 duplicate group: 2 files, 1 redundant copy
+  Wasted space: 2.0 KiB
+
+  [1] 2.0 KiB x 2 (wasted 2.0 KiB)  sha256 5d5ee0455cb1
+      C:\work\media\notes.txt
+      C:\work\backup\notes.txt
+  ```
 - `--include` / `--exclude` take shell-style globs and can be repeated. They
   match the file name or the path relative to the scanned root, so
   `--include "*.jpg"`, `--exclude .git` and `--exclude "build/*"` all work.

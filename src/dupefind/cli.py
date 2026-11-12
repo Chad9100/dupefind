@@ -74,6 +74,14 @@ def _scan_options() -> argparse.ArgumentParser:
         "so empty files are skipped; use 0 to include them)",
     )
     p.add_argument(
+        "--max-size",
+        type=_size_arg,
+        default=None,
+        metavar="SIZE",
+        help="ignore files larger than SIZE, e.g. 500M, 2G (default: no limit); "
+        "handy to skip huge videos or disk images",
+    )
+    p.add_argument(
         "--include",
         action="append",
         default=[],
@@ -244,7 +252,7 @@ def _run_scan(args):
         result = find_duplicates(
             args.paths, include=args.include, exclude=args.exclude,
             min_size=args.min_size, progress=progress, jobs=args.jobs, cache=cache,
-            one_file_system=args.one_file_system,
+            one_file_system=args.one_file_system, max_size=args.max_size,
         )
     finally:
         if progress is not None:
@@ -261,6 +269,9 @@ def _run_scan(args):
 def _cmd_scan(args) -> int:
     if not args.paths:
         print("dupefind: error: scan needs at least one PATH", file=sys.stderr)
+        return 2
+    if args.max_size is not None and args.max_size < args.min_size:
+        print("dupefind: error: --max-size is smaller than --min-size", file=sys.stderr)
         return 2
     result = _run_scan(args)
     result.groups = sort_groups(result.groups, args.sort)
@@ -290,6 +301,9 @@ def _cmd_plan(args) -> int:
     else:
         if not args.paths:
             print("dupefind: error: plan needs PATH or --from-scan", file=sys.stderr)
+            return 2
+        if args.max_size is not None and args.max_size < args.min_size:
+            print("dupefind: error: --max-size is smaller than --min-size", file=sys.stderr)
             return 2
         result = _run_scan(args)
     _warn_errors(result)
