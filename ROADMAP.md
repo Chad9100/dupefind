@@ -64,7 +64,7 @@ Estimates are rough working hours for one person.
 - [x] `--max-size SIZE` to skip very large files (scan and plan)
 - [ ] `--newer-than AGE` / `--older-than AGE` to limit by modification time
 - [ ] `--skip-hidden` to ignore dotfiles and Windows hidden/system files
-- [ ] `--min-copies N` to report only groups with at least N copies
+- [x] `--min-copies N` to report only groups with at least N copies
 
 ## v1.0: release (about 2 h)
 

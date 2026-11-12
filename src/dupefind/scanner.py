@@ -301,6 +301,7 @@ def find_duplicates(
     cache: HashCache | None = None,
     one_file_system: bool = False,
     max_size: int | None = None,
+    min_copies: int = 2,
 ) -> ScanResult:
     """Scan ``roots`` and return groups of byte-identical files.
 
@@ -317,6 +318,8 @@ def find_duplicates(
         raise ValueError("jobs must be at least 1")
     if max_size is not None and max_size < min_size:
         raise ValueError("max_size must not be smaller than min_size")
+    if min_copies < 2:
+        raise ValueError("min_copies must be at least 2")
     result = ScanResult(roots=[os.path.abspath(r) for r in roots])
     errors = result.errors
 
@@ -370,7 +373,7 @@ def find_duplicates(
 
     groups: list[DupGroup] = []
     for size, digest, members in matches:
-        if len(members) < 2:
+        if len(members) < min_copies:
             continue
         members.sort(key=lambda f: (f.root_index, f.path))
         groups.append(DupGroup(size, digest, members))

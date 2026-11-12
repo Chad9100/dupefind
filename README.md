@@ -36,7 +36,7 @@ That puts a `dupefind` command on your PATH. `python -m dupefind` works too.
 ```sh
 dupefind scan PATH... [--min-size SIZE] [--max-size SIZE] [--include GLOB] [--exclude GLOB]
                       [--json | --csv] [--limit N] [--sort KEY] [--quiet] [--jobs N] [--cache FILE]
-                      [--one-file-system]
+                      [--one-file-system] [--min-copies N]
 ```
 
 - `--min-size` ignores small files: `100`, `4K`, `1.5M`, `2GiB` (1K = 1024).
@@ -56,6 +56,22 @@ dupefind scan PATH... [--min-size SIZE] [--max-size SIZE] [--include GLOB] [--ex
   [1] 2.0 KiB x 2 (wasted 2.0 KiB)  sha256 5d5ee0455cb1
       C:\work\media\notes.txt
       C:\work\backup\notes.txt
+  ```
+- `--min-copies N` reports only groups with at least N identical files
+  (default 2, minimum 2), to focus on files copied many times. Also works
+  with `plan`. Captured on a temp folder with three copies of one file and
+  two copies of another (prefix shortened to `C:\work`):
+
+  ```text
+  $ dupefind scan d --min-copies 3
+  Scanned 5 files (96 B) in 1 root
+  Found 1 duplicate group: 3 files, 2 redundant copies
+  Wasted space: 36 B
+
+  [1] 18 B x 3 (wasted 36 B)  sha256 424bcf85457a
+      C:\work\d\a1.txt
+      C:\work\d\a2.txt
+      C:\work\d\a3.txt
   ```
 - `--include` / `--exclude` take shell-style globs and can be repeated. They
   match the file name or the path relative to the scanned root, so

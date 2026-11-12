@@ -55,6 +55,16 @@ def _jobs_arg(text: str) -> int:
     return n
 
 
+def _copies_arg(text: str) -> int:
+    try:
+        n = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number: {text!r}") from None
+    if n < 2:
+        raise argparse.ArgumentTypeError("must be at least 2")
+    return n
+
+
 def _age_arg(text: str):
     try:
         return parse_age(text)
@@ -80,6 +90,14 @@ def _scan_options() -> argparse.ArgumentParser:
         metavar="SIZE",
         help="ignore files larger than SIZE, e.g. 500M, 2G (default: no limit); "
         "handy to skip huge videos or disk images",
+    )
+    p.add_argument(
+        "--min-copies",
+        type=_copies_arg,
+        default=2,
+        metavar="N",
+        help="report only groups with at least N identical files (default: 2); "
+        "e.g. 3 shows files copied many times",
     )
     p.add_argument(
         "--include",
@@ -253,6 +271,7 @@ def _run_scan(args):
             args.paths, include=args.include, exclude=args.exclude,
             min_size=args.min_size, progress=progress, jobs=args.jobs, cache=cache,
             one_file_system=args.one_file_system, max_size=args.max_size,
+            min_copies=args.min_copies,
         )
     finally:
         if progress is not None:
